@@ -20,6 +20,7 @@ export function LocationSelector({
   const [searching, setSearching] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState('');
   const searchControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -56,6 +57,8 @@ export function LocationSelector({
         setResults(list);
         if (list.length === 0) {
           setFeedback(`No cities found matching "${clean}". Try a nearby major city.`);
+        } else {
+          setAnnouncement(`Found ${list.length} matching location${list.length === 1 ? '' : 's'} for ${clean}.`);
         }
       }
     } catch (err) {
@@ -68,6 +71,11 @@ export function LocationSelector({
     }
   }
 
+  function handleSelectCity(loc: CityLocation) {
+    onSelectLocation(loc);
+    setAnnouncement(`Selected location ${loc.name}, ${loc.country}.`);
+  }
+
   function handleUseMyLocation() {
     if (!('geolocation' in navigator)) {
       setFeedback('Browser geolocation is unavailable on this device. Choose a city manually.');
@@ -78,8 +86,20 @@ export function LocationSelector({
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude, longitude } = pos.coords;
+        if (
+          !Number.isFinite(latitude) ||
+          !Number.isFinite(longitude) ||
+          latitude < -90 ||
+          latitude > 90 ||
+          longitude < -180 ||
+          longitude > 180
+        ) {
+          setGeoLoading(false);
+          setFeedback('Received invalid device coordinates. Please search your city manually.');
+          return;
+        }
         const isIndia = isCoordinateInIndia(latitude, longitude);
-        onSelectLocation({
+        const gpsLoc: CityLocation = {
           id: `gps-${latitude.toFixed(2)}-${longitude.toFixed(2)}`,
           name: 'My Current Area',
           area: `${latitude.toFixed(2)}°, ${longitude.toFixed(2)}°`,
@@ -90,7 +110,8 @@ export function LocationSelector({
           longitude,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'auto',
           isIndia,
-        });
+        };
+        handleSelectCity(gpsLoc);
         setGeoLoading(false);
         setResults([]);
       },
@@ -108,11 +129,15 @@ export function LocationSelector({
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {announcement}
+      </div>
+
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2.5 text-sm text-[#102A43]">
           <MapPin className="h-4 w-4 text-[#20C997] shrink-0" aria-hidden="true" />
           <span className="font-semibold">{currentLocation.name}</span>
-          <span className="text-slate-400" aria-hidden="true">·</span>
+          <span className="text-slate-500" aria-hidden="true">·</span>
           <span className="text-slate-600">
             {currentLocation.region}, {currentLocation.country}
           </span>
@@ -125,7 +150,7 @@ export function LocationSelector({
             </label>
             <div className="relative flex-1 sm:w-64">
               <Search
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"
                 aria-hidden="true"
               />
               <input
@@ -134,7 +159,7 @@ export function LocationSelector({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search city (e.g., Pune, Delhi, Tokyo)"
-                className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-[#102A43] placeholder:text-slate-400 focus:border-[#38BDF8] focus:outline-none focus:ring-2 focus:ring-[#38BDF8]/30"
+                className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-[#102A43] placeholder:text-slate-500 focus:border-[#38BDF8] focus:outline-none focus:ring-2 focus:ring-[#38BDF8]/30"
               />
             </div>
             <button
@@ -166,21 +191,21 @@ export function LocationSelector({
 
       {results.length > 0 && (
         <div className="mt-3 border-t border-slate-100 pt-3">
-          <p className="mb-2 text-xs font-semibold text-slate-500">Matching Locations</p>
+          <p className="mb-2 text-xs font-semibold text-slate-600">Matching Locations</p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {results.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => {
-                  onSelectLocation(item);
+                  handleSelectCity(item);
                   setResults([]);
                   setQuery('');
                 }}
                 className="flex flex-col items-start rounded-lg border border-slate-200 px-3 py-2 text-left text-sm transition-colors hover:border-[#38BDF8] hover:bg-sky-50/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8]"
               >
                 <span className="font-semibold text-[#102A43]">{item.name}</span>
-                <span className="text-xs text-slate-500 truncate max-w-full">
+                <span className="text-xs text-slate-600 truncate max-w-full">
                   {item.region}, {item.country}
                 </span>
               </button>
@@ -199,7 +224,7 @@ export function LocationSelector({
                 key={city.id}
                 type="button"
                 aria-pressed={active}
-                onClick={() => onSelectLocation(city)}
+                onClick={() => handleSelectCity(city)}
                 className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8] ${
                   active
                     ? 'bg-[#102A43] text-white'

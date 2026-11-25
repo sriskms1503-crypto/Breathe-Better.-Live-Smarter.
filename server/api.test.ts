@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
-import { clearRateLimitBucketsForTests, createApp } from '../server.ts';
+import { clearRateLimitBucketsForTests, createApp, isAllowedOrigin } from '../server.ts';
 
 async function withServer(run: (baseUrl: string) => Promise<void>) {
   clearRateLimitBucketsForTests();
@@ -240,5 +240,25 @@ test('Rate limiter emits standard RateLimit headers and enforces 429 on burst tr
     });
     assert.equal(blocked.status, 429);
     assert.ok(blocked.headers.get('retry-after'));
+  });
+});
+
+test('isAllowedOrigin prevents Host-header injection and safely normalizes configured APP_URL', async () => {
+  assert.equal(isAllowedOrigin('https://evil.example', 'evil.example\r\nX-Injected: true'), false);
+  assert.equal(isAllowedOrigin('https://evil.example:99999', 'evil.example:99999'), false);
+  assert.equal(isAllowedOrigin('https://ais.example.run.app', 'ais.example.run.app'), true);
+  assert.equal(
+    isAllowedOrigin('https://app.example.com', undefined, 'https://app.example.com/some/path'),
+    true
+  );
+  assert.equal(isAllowedOrigin('https://other.example.com', undefined, 'not a valid url'), false);
+
+  await withServer(async (baseUrl) => {
+    const res = await fetch(
+      `${baseUrl}/api/air-quality?lat=28.61&lon=77.20&name=Delhi%07%1FHub`
+    );
+    assert.equal(res.status, 200);
+    const json = (await res.json()) as { snapshot: { location: { name: string } } };
+    assert.equal(json.snapshot.location.name.includes('\u0007'), false);
   });
 });

@@ -1,10 +1,24 @@
 import { z } from 'zod';
 
+/**
+ * Strips ASCII control characters and normalizes internal whitespace.
+ */
+export function stripControlChars(value: string): string {
+  return value.replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+const optionalSanitizedString = (maxLen: number) =>
+  z
+    .string()
+    .transform(stripControlChars)
+    .pipe(z.string().max(maxLen))
+    .optional();
+
 export const LocationSearchQuerySchema = z.object({
   q: z
     .string()
     .trim()
-    .transform((s) => s.replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim())
+    .transform(stripControlChars)
     .pipe(
       z
         .string()
@@ -16,11 +30,15 @@ export const LocationSearchQuerySchema = z.object({
 export const AirQualityQuerySchema = z.object({
   lat: z.coerce.number().finite().min(-90).max(90),
   lon: z.coerce.number().finite().min(-180).max(180),
-  name: z.string().trim().min(1).max(100).optional(),
-  region: z.string().trim().max(100).optional(),
-  country: z.string().trim().max(80).optional(),
-  countryCode: z.string().trim().max(10).optional(),
-  timezone: z.string().trim().max(80).optional(),
+  name: z
+    .string()
+    .transform(stripControlChars)
+    .pipe(z.string().min(1).max(100))
+    .optional(),
+  region: optionalSanitizedString(100),
+  country: optionalSanitizedString(80),
+  countryCode: optionalSanitizedString(10),
+  timezone: optionalSanitizedString(80),
 });
 
 export const HouseholdGroupSchema = z.enum([
@@ -136,6 +154,9 @@ const INJECTION_PATTERNS = [
   /(<\|im_start\|>|\[INST\]|^\s*system\s*:)/i,
 ];
 
+/**
+ * Strips invisible/bidi characters and evaluates prompts against known injection patterns.
+ */
 export function sanitizeUserPrompt(raw: string): { sanitized: string; flagged: boolean } {
   const cleaned = raw
     // Strip ASCII control characters and invisible/bidi unicode characters
@@ -148,6 +169,9 @@ export function sanitizeUserPrompt(raw: string): { sanitized: string; flagged: b
 
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
+/**
+ * Recursively checks objects/arrays for prototype-pollution keys and excessive depth (>12).
+ */
 export function hasUnsafeObjectKeys(value: unknown, depth = 0): boolean {
   if (depth > 12) {
     return true;

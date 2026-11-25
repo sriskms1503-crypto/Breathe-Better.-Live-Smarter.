@@ -1,9 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  MAX_ENV_CACHE_ENTRIES,
   clearEnvCacheForTests,
   fetchLiveEnvironmentalSnapshot,
+  findNearestVisibilityKm,
   searchLocations,
+  setBoundedCacheEntry,
+  weatherCodeToSummary,
 } from './envData.ts';
 import { PRESET_CITIES } from '../src/data/presets.ts';
 
@@ -220,4 +224,43 @@ test('fetchLiveEnvironmentalSnapshot coalesces concurrent in-flight requests for
     clearEnvCacheForTests();
     globalThis.fetch = originalFetch;
   }
+});
+
+test('weatherCodeToSummary, findNearestVisibilityKm, and setBoundedCacheEntry handle all edge cases', () => {
+  assert.equal(weatherCodeToSummary(0), 'Clear sky');
+  assert.equal(weatherCodeToSummary(2), 'Partly cloudy');
+  assert.equal(weatherCodeToSummary(45), 'Fog or mist');
+  assert.equal(weatherCodeToSummary(61), 'Rain / drizzle');
+  assert.equal(weatherCodeToSummary(73), 'Snow');
+  assert.equal(weatherCodeToSummary(81), 'Rain showers');
+  assert.equal(weatherCodeToSummary(95), 'Thunderstorm');
+  assert.equal(weatherCodeToSummary(42), 'Mixed sky');
+  assert.equal(weatherCodeToSummary('bad'), 'Observed conditions');
+
+  const baseMs = Date.parse('2026-01-15T12:00:00Z');
+  assert.equal(findNearestVisibilityKm([], [], baseMs), null);
+  assert.equal(
+    findNearestVisibilityKm(
+      ['2026-01-15T06:00:00Z', '2026-01-15T12:15:00Z', '2026-01-15T18:00:00Z'],
+      [3000, 8400, 12000],
+      baseMs
+    ),
+    8.4
+  );
+
+  // Bounded cache prunes expired entries first and enforces maxEntries cap
+  const testCache = new Map<string, { value: number; expiresAt: number }>();
+  const now = 10_000;
+  setBoundedCacheEntry(testCache, 'expired-1', { value: 1, expiresAt: now - 500 }, 3, now);
+  setBoundedCacheEntry(testCache, 'live-1', { value: 2, expiresAt: now + 5000 }, 3, now);
+  setBoundedCacheEntry(testCache, 'live-2', { value: 3, expiresAt: now + 5000 }, 3, now);
+  setBoundedCacheEntry(testCache, 'live-3', { value: 4, expiresAt: now + 5000 }, 3, now);
+
+  assert.equal(testCache.has('expired-1'), false);
+  assert.equal(testCache.size, 3);
+
+  setBoundedCacheEntry(testCache, 'live-4', { value: 5, expiresAt: now + 5000 }, 3, now);
+  assert.equal(testCache.has('live-1'), false);
+  assert.equal(testCache.has('live-4'), true);
+  assert.equal(MAX_ENV_CACHE_ENTRIES, 50);
 });

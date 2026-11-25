@@ -50,6 +50,36 @@ test('buildDailyRoutine adapts suitability for Severe/Poor vs Good air', () => {
   assert.equal(goodSlots[2].airSuitability, 'Suitable');
 });
 
+test('buildDailyRoutine handles olderAdults, respiratorySensitivities, workFromHome, calm wind, and no-purifier households', () => {
+  const tokyo = PRESET_CITIES.find((c) => c.id === 'tokyo-jp')!;
+  const moderateCalmSnap = {
+    ...buildDemoFallbackSnapshot(tokyo),
+    cpcbAqi: 165,
+    cpcbCategory: 'Moderate' as const,
+    weather: {
+      temperatureC: 18,
+      humidityPercent: 60,
+      windSpeedKmh: 4,
+      visibilityKm: 6,
+      weatherSummary: 'Partly cloudy',
+    },
+  };
+
+  const wfhSlots = buildDailyRoutine(moderateCalmSnap, {
+    householdSize: 2,
+    groups: ['olderAdults', 'respiratorySensitivities', 'workFromHome', 'outdoorWorkers'],
+    preferredStandard: 'CPCB',
+    hasPurifier: false,
+    gridRegion: 'INDIA',
+  });
+
+  assert.equal(wfhSlots[0].airSuitability, 'Caution');
+  assert.equal(wfhSlots[1].airSuitability, 'Caution');
+  assert.ok(wfhSlots[1].actions.some((a) => a.id === 'afternoon-worker'));
+  assert.ok(wfhSlots[1].actions[0].what.toLowerCase().includes('work-from-home'));
+  assert.ok(wfhSlots[3].actions[0].title.toLowerCase().includes('sleep zone'));
+});
+
 test('indoor checklist covers all 5 required rooms with explicit limitations', () => {
   const tasks = getInitialIndoorChecklist();
   const rooms = new Set(tasks.map((t) => t.room));

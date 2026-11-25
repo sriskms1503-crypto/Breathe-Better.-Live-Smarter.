@@ -3,6 +3,7 @@ import { Download, Lock, Trash2, Upload, Users } from 'lucide-react';
 import type { AlertPreferences, FamilyProfile, HouseholdGroup } from '../types/airwise.ts';
 import type { CarbonCalculatorInput } from '../lib/impact.ts';
 import { downloadTextFile } from '../lib/download.ts';
+import { clampFiniteInt } from '../lib/format.ts';
 import { hasUnsafeObjectKeys, PersistedStateSchema } from '../lib/validation.ts';
 
 interface SettingsPageProps {
@@ -171,10 +172,9 @@ export function SettingsPage({
               max={20}
               value={profile.householdSize}
               onChange={(e) => {
-                const val = Number(e.target.value);
                 onUpdateProfile({
                   ...profile,
-                  householdSize: Number.isFinite(val) ? Math.max(1, Math.min(20, Math.round(val))) : 1,
+                  householdSize: clampFiniteInt(Number(e.target.value), 1, 20, 1),
                 });
               }}
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm text-[#102A43] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8]"

@@ -49,3 +49,30 @@ export function slugifyCity(name: string): string {
     .replace(/^-+|-+$/g, '');
   return slug || 'location';
 }
+
+/**
+ * Clamps a numeric input to a closed [min, max] range, returning fallback when non-finite.
+ */
+export function clampFiniteNumber(
+  value: number,
+  min: number,
+  max: number,
+  fallback = min
+): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, value));
+}
+
+/**
+ * Clamps and rounds a numeric input to an integer within [min, max].
+ */
+export function clampFiniteInt(
+  value: number,
+  min: number,
+  max: number,
+  fallback = min
+): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+

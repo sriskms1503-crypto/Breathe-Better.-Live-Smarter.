@@ -18,7 +18,8 @@ import { isCoordinateInIndia } from './src/lib/aqi.ts';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = Number(process.env.PORT || 3000);
+const rawPort = Number(process.env.PORT ?? 3000);
+const PORT = Number.isInteger(rawPort) && rawPort >= 1 && rawPort <= 65535 ? rawPort : 3000;
 const isProduction = process.env.NODE_ENV === 'production';
 
 // Sliding-window per-IP rate limiter with expired-bucket pruning & bounded size
@@ -79,7 +80,16 @@ function rateLimit(maxRequests: number, windowMs: number) {
   };
 }
 
-function isAllowedOrigin(origin: string, req: Request): boolean {
+const SAFE_HOST_HEADER_RE = /^[a-zA-Z0-9.-]+(?::(\d{1,5}))?$/;
+
+/**
+ * Validates whether a request Origin header is permitted for same-host / configured APP_URL access.
+ */
+export function isAllowedOrigin(
+  origin: string,
+  hostHeader: string | undefined,
+  configuredAppUrl = process.env.APP_URL
+): boolean {
   let normalizedOrigin: string;
   try {
     const parsed = new URL(origin);
@@ -95,15 +105,28 @@ function isAllowedOrigin(origin: string, req: Request): boolean {
     'https://localhost:3000',
     'https://127.0.0.1:3000',
   ]);
-  const appUrl = process.env.APP_URL;
-  if (appUrl && appUrl !== 'MY_APP_URL') {
-    allowedOrigins.add(appUrl.replace(/\/$/, ''));
+
+  if (configuredAppUrl && configuredAppUrl !== 'MY_APP_URL') {
+    try {
+      const parsedAppUrl = new URL(configuredAppUrl);
+      if (parsedAppUrl.protocol === 'http:' || parsedAppUrl.protocol === 'https:') {
+        allowedOrigins.add(parsedAppUrl.origin);
+      }
+    } catch {
+      // Ignore malformed APP_URL
+    }
   }
-  const host = req.headers.host;
-  if (host) {
-    allowedOrigins.add(`https://${host}`);
-    allowedOrigins.add(`http://${host}`);
+
+  if (hostHeader) {
+    const hostMatch = SAFE_HOST_HEADER_RE.exec(hostHeader.trim());
+    const portNum = hostMatch?.[1] ? Number(hostMatch[1]) : null;
+    const validPort = portNum === null || (portNum >= 1 && portNum <= 65535);
+    if (hostMatch && validPort && !hostHeader.includes('..')) {
+      allowedOrigins.add(`https://${hostHeader.trim()}`);
+      allowedOrigins.add(`http://${hostHeader.trim()}`);
+    }
   }
+
   return allowedOrigins.has(normalizedOrigin);
 }
 
@@ -150,7 +173,7 @@ export function createApp() {
     const origin = req.headers.origin;
 
     if (origin) {
-      const allowed = isAllowedOrigin(origin, req);
+      const allowed = isAllowedOrigin(origin, req.headers.host);
       if (allowed) {
         res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Vary', 'Origin');

@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { escapeCsvCell, escapeXml, formatSafeDateTime, formatSafeTime, slugifyCity } from './format.ts';
+import {
+  clampFiniteInt,
+  clampFiniteNumber,
+  escapeCsvCell,
+  escapeXml,
+  formatSafeDateTime,
+  formatSafeTime,
+  slugifyCity,
+} from './format.ts';
 import { buildCsvString, sanitizeFilename } from './download.ts';
 
 test('formatSafeDateTime and formatSafeTime handle valid and invalid ISO timestamps safely', () => {
@@ -56,4 +64,13 @@ test('buildCsvString and slugifyCity format cleanly', () => {
   assert.equal(csv, 'Time,City,Note\r\n08:00,"Delhi, IN",\'=1+1\r\n09:00,Pune,');
   assert.equal(slugifyCity('New Delhi, India'), 'new-delhi-india');
   assert.equal(slugifyCity('---'), 'location');
+
+  assert.equal(clampFiniteNumber(Number.NaN, 0, 100, 5), 5);
+  assert.equal(clampFiniteNumber(-12, 0, 100, 5), 0);
+  assert.equal(clampFiniteNumber(250, 0, 100, 5), 100);
+  assert.equal(clampFiniteNumber(42.5, 0, 100), 42.5);
+
+  assert.equal(clampFiniteInt(Number.POSITIVE_INFINITY, 1, 20, 3), 3);
+  assert.equal(clampFiniteInt(4.6, 1, 20, 1), 5);
+  assert.equal(clampFiniteInt(99, 1, 20, 1), 20);
 });

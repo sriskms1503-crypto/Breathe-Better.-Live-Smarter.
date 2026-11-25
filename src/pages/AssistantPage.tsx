@@ -1,23 +1,22 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Bot, Check, Copy, RotateCcw, Send, ShieldAlert, User } from 'lucide-react';
-import type {
-  AssistantStructuredReply,
-  EnvironmentalSnapshot,
-  FamilyProfile,
-} from '../types/airwise.ts';
+import { Bot, Download, RotateCcw, Send } from 'lucide-react';
+import type { EnvironmentalSnapshot, FamilyProfile } from '../types/airwise.ts';
 import { AqiStatusBadge } from '../components/AqiBadge.tsx';
 import { SafeImage } from '../components/SafeImage.tsx';
+import { AssistantReplyCard } from '../components/AssistantReplyCard.tsx';
+import {
+  askEnvironmentalAssistant,
+  createExchangeId,
+  formatAssistantExchangeText,
+  type ChatExchange,
+} from '../lib/assistantClient.ts';
+import { downloadTextFile } from '../lib/download.ts';
+import { slugifyCity } from '../lib/format.ts';
 import { formatHouseholdGroups } from '../lib/recommendations.ts';
 
 interface AssistantPageProps {
   snapshot: EnvironmentalSnapshot;
   profile: FamilyProfile;
-}
-
-interface ChatExchange {
-  id: string;
-  question: string;
-  reply: AssistantStructuredReply;
 }
 
 const QUICK_QUESTIONS = [
@@ -31,6 +30,9 @@ const QUICK_QUESTIONS = [
   'What can I do to reduce my carbon footprint?',
 ];
 
+/**
+ * Interactive AI Family Environmental Assistant grounded in current location telemetry and profile.
+ */
 export function AssistantPage({ snapshot, profile }: AssistantPageProps) {
   const [question, setQuestion] = useState('');
   const [exchanges, setExchanges] = useState<ChatExchange[]>([]);
@@ -38,10 +40,12 @@ export function AssistantPage({ snapshot, profile }: AssistantPageProps) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     return () => {
       if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      requestAbortRef.current?.abort();
     };
   }, []);
 
@@ -52,51 +56,38 @@ export function AssistantPage({ snapshot, profile }: AssistantPageProps) {
       return;
     }
 
+    requestAbortRef.current?.abort();
+    const controller = new AbortController();
+    requestAbortRef.current = controller;
+
     setSubmitting(true);
     setErrorMsg(null);
 
     try {
-      const res = await fetch('/api/assistant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question: clean,
-          locationName: `${snapshot.location.name}, ${snapshot.location.country}`,
-          countryCode: snapshot.location.countryCode,
-          cpcbAqi: snapshot.cpcbAqi,
-          cpcbCategory: snapshot.cpcbCategory,
-          usAqi: snapshot.usAqi,
-          pm25: snapshot.pollutants.pm25,
-          pm10: snapshot.pollutants.pm10,
-          no2: snapshot.pollutants.no2,
-          o3: snapshot.pollutants.o3,
-          temperatureC: snapshot.weather.temperatureC,
-          humidityPercent: snapshot.weather.humidityPercent,
-          windSpeedKmh: snapshot.weather.windSpeedKmh,
-          dataStatus: snapshot.dataStatus,
-          householdGroups: profile.groups,
-        }),
-      });
+      const result = await askEnvironmentalAssistant(clean, snapshot, profile, controller.signal);
+      if (controller.signal.aborted) return;
 
-      const data = (await res.json()) as { reply?: AssistantStructuredReply; error?: string };
-      if (!res.ok || !data.reply) {
-        setErrorMsg(data.error ?? 'Could not generate advice right now. Please try again.');
+      if (result.error || !result.reply) {
+        setErrorMsg(result.error ?? 'Could not generate advice right now. Please try again.');
         return;
       }
 
       setExchanges((prev) => [
         ...prev,
         {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          id: createExchangeId(),
           question: clean,
-          reply: data.reply!,
+          reply: result.reply!,
         },
       ]);
       setQuestion('');
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       setErrorMsg('Network error reaching the AI assistant endpoint.');
     } finally {
-      setSubmitting(false);
+      if (!controller.signal.aborted) {
+        setSubmitting(false);
+      }
     }
   }
 
@@ -106,16 +97,7 @@ export function AssistantPage({ snapshot, profile }: AssistantPageProps) {
   }
 
   async function handleCopyReply(ex: ChatExchange) {
-    const summaryText = [
-      `AIRWISE AI Guidance (${snapshot.location.name})`,
-      `Question: ${ex.question}`,
-      `Summary: ${ex.reply.summary}`,
-      `Action: ${ex.reply.recommendation.what}`,
-      `Why: ${ex.reply.recommendation.why}`,
-      `When: ${ex.reply.recommendation.when}`,
-      `Steps:\n${ex.reply.actionSteps.map((s, i) => `${i + 1}. ${s}`).join('\n')}`,
-      `Note: ${ex.reply.disclaimer}`,
-    ].join('\n\n');
+    const summaryText = formatAssistantExchangeText(ex, snapshot.location.name);
     try {
       await navigator.clipboard.writeText(summaryText);
       setCopiedId(ex.id);
@@ -124,6 +106,17 @@ export function AssistantPage({ snapshot, profile }: AssistantPageProps) {
     } catch {
       setCopiedId(null);
     }
+  }
+
+  function handleExportSession() {
+    const markdown = exchanges
+      .map((ex) => formatAssistantExchangeText(ex, snapshot.location.name))
+      .join('\n\n---\n\n');
+    downloadTextFile(
+      markdown,
+      `airwise-assistant-${slugifyCity(snapshot.location.name)}.md`,
+      'text/markdown;charset=utf-8'
+    );
   }
 
   return (
@@ -156,11 +149,19 @@ export function AssistantPage({ snapshot, profile }: AssistantPageProps) {
             <AqiStatusBadge category={snapshot.cpcbCategory} aqi={snapshot.cpcbAqi} />
           </div>
           {exchanges.length > 0 && (
-            <div className="flex justify-end">
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={handleExportSession}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-[#102A43] hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8] whitespace-nowrap shrink-0"
+              >
+                <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Export Session</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setExchanges([])}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-[#102A43] hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8]"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-[#102A43] hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8] whitespace-nowrap shrink-0"
               >
                 <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
                 <span>Clear Conversation</span>
@@ -204,109 +205,12 @@ export function AssistantPage({ snapshot, profile }: AssistantPageProps) {
           </div>
         ) : (
           exchanges.map((ex) => (
-            <div key={ex.id} className="space-y-3">
-              {/* User Question */}
-              <div className="flex items-start justify-end gap-3">
-                <div className="max-w-2xl rounded-xl bg-[#102A43] px-4 py-3 text-sm text-white">
-                  {ex.question}
-                </div>
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-[#102A43]">
-                  <User className="h-4 w-4" aria-hidden="true" />
-                </div>
-              </div>
-
-              {/* Assistant Structured Reply */}
-              <article className="rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-2">
-                    <Bot className="h-5 w-5 text-emerald-700" aria-hidden="true" />
-                    <h3 className="font-display text-base font-bold text-[#102A43]">
-                      AIRWISE Family Guidance
-                    </h3>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-[11px] text-slate-600">
-                      Engine: {ex.reply.source === 'gemini-4-hydrogen' ? 'Gemini AI + Live Context' : 'Verified Rule Engine'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => void handleCopyReply(ex)}
-                      className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-[#102A43] hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8]"
-                    >
-                      {copiedId === ex.id ? (
-                        <Check className="h-3 w-3 text-emerald-700" aria-hidden="true" />
-                      ) : (
-                        <Copy className="h-3 w-3" aria-hidden="true" />
-                      )}
-                      <span>{copiedId === ex.id ? 'Copied' : 'Copy'}</span>
-                    </button>
-                  </div>
-                </div>
-
-                <p className="mt-3 text-sm leading-relaxed text-[#102A43]">{ex.reply.summary}</p>
-
-                <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div className="rounded-lg bg-[#F4F8FB] p-4">
-                    <h4 className="text-xs font-bold text-[#102A43]">Measured Facts</h4>
-                    <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-slate-700">
-                      {ex.reply.measuredFacts.map((fact, idx) => (
-                        <li key={idx}>{fact}</li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div className="rounded-lg bg-[#F4F8FB] p-4">
-                    <h4 className="text-xs font-bold text-[#102A43]">Contextual Estimates</h4>
-                    <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-slate-700">
-                      {ex.reply.contextualEstimates.map((est, idx) => (
-                        <li key={idx}>{est}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-
-                <dl className="mt-4 grid grid-cols-1 gap-3 border-t border-slate-100 pt-4 text-xs sm:grid-cols-2">
-                  <div>
-                    <dt className="font-semibold text-slate-600">What Action to Take</dt>
-                    <dd className="mt-0.5 text-sm text-[#102A43]">{ex.reply.recommendation.what}</dd>
-                  </div>
-                  <div>
-                    <dt className="font-semibold text-slate-600">Why It Matters</dt>
-                    <dd className="mt-0.5 text-sm text-slate-700">{ex.reply.recommendation.why}</dd>
-                  </div>
-                  <div>
-                    <dt className="font-semibold text-slate-600">When to Act</dt>
-                    <dd className="mt-0.5 text-sm text-slate-700">{ex.reply.recommendation.when}</dd>
-                  </div>
-                  <div>
-                    <dt className="font-semibold text-slate-600">Expected Benefits</dt>
-                    <dd className="mt-0.5 text-sm text-slate-700">{ex.reply.recommendation.expectedBenefits}</dd>
-                  </div>
-                  <div>
-                    <dt className="font-semibold text-slate-600">Estimated Environmental Impact</dt>
-                    <dd className="mt-0.5 text-sm text-slate-700">{ex.reply.recommendation.estimatedImpact}</dd>
-                  </div>
-                  <div>
-                    <dt className="font-semibold text-slate-600">Confidence & Limitations</dt>
-                    <dd className="mt-0.5 text-sm text-slate-600">{ex.reply.recommendation.confidenceAndLimitations}</dd>
-                  </div>
-                </dl>
-
-                <div className="mt-4 border-t border-slate-100 pt-4">
-                  <h4 className="text-xs font-bold text-[#102A43]">Practical Next Steps</h4>
-                  <ol className="mt-2 list-decimal space-y-1 pl-4 text-sm text-slate-700">
-                    {ex.reply.actionSteps.map((step, idx) => (
-                      <li key={idx}>{step}</li>
-                    ))}
-                  </ol>
-                </div>
-
-                <p className="mt-4 flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
-                  <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-slate-600" aria-hidden="true" />
-                  <span>{ex.reply.disclaimer}</span>
-                </p>
-              </article>
-            </div>
+            <AssistantReplyCard
+              key={ex.id}
+              exchange={ex}
+              copied={copiedId === ex.id}
+              onCopy={(item) => void handleCopyReply(item)}
+            />
           ))
         )}
       </section>

@@ -1,18 +1,15 @@
 import type { StructuredRecommendation } from '../types/airwise.ts';
+import { PRIORITY_BADGE_STYLES } from '../lib/statusStyles.ts';
 
 interface RecommendationCardProps {
   item: StructuredRecommendation;
 }
 
+/**
+ * Displays a structured action recommendation with basis, impact, and confidence limitations.
+ */
 export function RecommendationCard({ item }: RecommendationCardProps) {
-  const priorityStyle =
-    item.priority === 'Urgent'
-      ? 'bg-red-50 text-red-800 border-red-200'
-      : item.priority === 'High'
-        ? 'bg-amber-50 text-amber-900 border-amber-200'
-        : item.priority === 'Moderate'
-          ? 'bg-sky-50 text-sky-900 border-sky-200'
-          : 'bg-emerald-50 text-emerald-900 border-emerald-200';
+  const priorityStyle = PRIORITY_BADGE_STYLES[item.priority];
 
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-5">

@@ -9,6 +9,7 @@ import {
   hasUnsafeObjectKeys,
   sanitizeUserPrompt,
 } from './validation.ts';
+import { parsePersistedStateJson } from '../hooks/useAirwiseState.ts';
 
 test('LocationSearchQuerySchema strips control chars and enforces length bounds', () => {
   const valid = LocationSearchQuerySchema.safeParse({ q: '  New\u0007 Delhi  ' });
@@ -24,9 +25,18 @@ test('LocationSearchQuerySchema strips control chars and enforces length bounds'
   assert.equal(tooLong.success, false);
 });
 
-test('AirQualityQuerySchema validates coordinate bounds and rejects non-finite numbers', () => {
-  const ok = AirQualityQuerySchema.safeParse({ lat: '28.6139', lon: '77.2090' });
+test('AirQualityQuerySchema validates coordinate bounds, strips control chars, and rejects non-finite numbers', () => {
+  const ok = AirQualityQuerySchema.safeParse({
+    lat: '28.6139',
+    lon: '77.2090',
+    name: 'New\u0007 Delhi\u001F',
+    region: 'Delhi\nNCR',
+  });
   assert.equal(ok.success, true);
+  if (ok.success) {
+    assert.equal(ok.data.name, 'New Delhi');
+    assert.equal(ok.data.region, 'Delhi NCR');
+  }
 
   const badLat = AirQualityQuerySchema.safeParse({ lat: 95, lon: 77 });
   assert.equal(badLat.success, false);
@@ -86,6 +96,17 @@ test('PersistedStateSchema rejects tampered localStorage values safely', () => {
     },
   });
   assert.equal(tampered.success, false);
+
+  const pollutedState = parsePersistedStateJson(
+    '{"__proto__":{"admin":true},"locationId":"delhi-in"}'
+  );
+  assert.deepEqual(pollutedState, {});
+
+  const validState = parsePersistedStateJson(
+    JSON.stringify({ locationId: 'mumbai-in', readAlertIds: ['alert-severe'] })
+  );
+  assert.equal(validState.locationId, 'mumbai-in');
+  assert.deepEqual(validState.readAlertIds, ['alert-severe']);
 });
 
 test('AssistantRequestSchema & AssistantOutputSchema enforce strict structure', () => {

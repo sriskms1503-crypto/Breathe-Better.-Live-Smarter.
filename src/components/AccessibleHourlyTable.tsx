@@ -43,7 +43,7 @@ export function AccessibleHourlyTable({
         <tbody className="divide-y divide-slate-100 font-mono tabular-nums">
           {rows.map((row, idx) => (
             <tr key={`${row.label}-${idx}`} className="hover:bg-slate-50/80">
-              <td className="px-3 py-1.5 text-slate-800">{row.label}</td>
+              <th scope="row" className="px-3 py-1.5 font-normal text-slate-800">{row.label}</th>
               <td className="px-3 py-1.5 font-sans text-slate-700">{row.phase}</td>
               {mode === 'particulates' ? (
                 <>

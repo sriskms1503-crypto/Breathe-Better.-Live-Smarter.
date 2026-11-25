@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildDemoFallbackSnapshot, PRESET_CITIES } from '../data/presets.ts';
-import { estimatePersonalExposurePlan, findOptimalVentilationWindow } from './exposure.ts';
+import {
+  compareCitySnapshots,
+  estimatePersonalExposurePlan,
+  findOptimalVentilationWindow,
+  simulateDailyExposureDose,
+} from './exposure.ts';
 import type { EnvironmentalSnapshot, FamilyProfile } from '../types/airwise.ts';
 
 const BASE_PROFILE: FamilyProfile = {
@@ -75,4 +80,39 @@ test('estimatePersonalExposurePlan computes protection tiers and actionable gaps
   );
   assert.equal(vulnerable.protectionTier, 'Baseline Vulnerability');
   assert.ok(vulnerable.missingHighImpactActions.length >= 2);
+});
+
+test('simulateDailyExposureDose models dose reductions with N95 + HEPA + sealed windows and guards invalid inputs', () => {
+  const protectedCase = simulateDailyExposureDose({
+    outdoorPm25: 120,
+    outdoorHoursPerDay: 2,
+    respirator: 'n95_ffp2',
+    indoorHepaActive: true,
+    windowsSealed: true,
+  });
+  assert.equal(protectedCase.protectionTier, 'Strong Protection');
+  assert.ok(protectedCase.protectedDailyDoseUg < protectedCase.unmitigatedDailyDoseUg);
+  assert.ok(protectedCase.reductionPercent >= 65);
+
+  const baselineCase = simulateDailyExposureDose({
+    outdoorPm25: null,
+    outdoorHoursPerDay: 99,
+    respirator: 'none',
+    indoorHepaActive: false,
+    windowsSealed: false,
+  });
+  assert.equal(baselineCase.outdoorPm25Used, 60);
+  assert.equal(baselineCase.reductionPercent, 0);
+  assert.equal(baselineCase.protectionTier, 'Baseline Vulnerability');
+});
+
+test('compareCitySnapshots calculates deltas and cleaner city summary accurately', () => {
+  const delhi = buildDemoFallbackSnapshot(PRESET_CITIES.find((c) => c.id === 'delhi-in')!);
+  const tokyo = buildDemoFallbackSnapshot(PRESET_CITIES.find((c) => c.id === 'tokyo-jp')!);
+
+  const cmp = compareCitySnapshots(delhi, tokyo);
+  assert.equal(cmp.cleanerCityName, tokyo.location.name);
+  assert.ok(cmp.cpcbDelta !== null && cmp.cpcbDelta > 0);
+  assert.ok(cmp.pm25Ratio !== null && cmp.pm25Ratio > 1);
+  assert.ok(cmp.summaryText.includes(tokyo.location.name));
 });

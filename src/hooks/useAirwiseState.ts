@@ -17,7 +17,7 @@ import {
 } from '../lib/recommendations.ts';
 import type { CarbonCalculatorInput } from '../lib/impact.ts';
 import { calculateCarbonImpact } from '../lib/impact.ts';
-import { PersistedStateSchema } from '../lib/validation.ts';
+import { hasUnsafeObjectKeys, PersistedStateSchema } from '../lib/validation.ts';
 
 const STORAGE_KEY = 'airwise_ai_state_v1';
 
@@ -76,12 +76,24 @@ interface PersistedState {
   alertPrefs?: AlertPreferences;
 }
 
+/**
+ * Safely parses and validates serialized localStorage state, rejecting prototype-pollution keys.
+ */
+export function parsePersistedStateJson(raw: string | null): PersistedState {
+  if (!raw || raw.length > 64 * 1024) return {};
+  try {
+    const json: unknown = JSON.parse(raw);
+    if (hasUnsafeObjectKeys(json)) return {};
+    const parsed = PersistedStateSchema.safeParse(json);
+    return parsed.success ? parsed.data : {};
+  } catch {
+    return {};
+  }
+}
+
 function loadPersistedState(): PersistedState {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = PersistedStateSchema.safeParse(JSON.parse(raw));
-    return parsed.success ? parsed.data : {};
+    return parsePersistedStateJson(localStorage.getItem(STORAGE_KEY));
   } catch {
     return {};
   }

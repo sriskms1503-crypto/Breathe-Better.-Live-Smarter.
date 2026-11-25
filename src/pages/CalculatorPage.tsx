@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import { calculateCarbonImpact, type CarbonCalculatorInput } from '../lib/impact.ts';
 import { buildCsvString, downloadTextFile } from '../lib/download.ts';
+import { clampFiniteInt, clampFiniteNumber } from '../lib/format.ts';
 import { SafeImage } from '../components/SafeImage.tsx';
 
 interface CalculatorPageProps {
@@ -28,6 +29,71 @@ const SHORT_CATEGORY_NAMES: Record<string, string> = {
   led: 'LEDs',
   waste: 'Waste',
 };
+
+type SliderNumericKey =
+  | 'carKmReplacedByTransitPerWeek'
+  | 'carKmCarpoolPerWeek'
+  | 'carKmReplacedByWalkCyclePerWeek'
+  | 'electricitySavedKwhPerWeek';
+
+interface SliderFieldConfig {
+  id: string;
+  key: SliderNumericKey;
+  label: string;
+  unit: string;
+  unitDescription: string;
+  min: number;
+  max: number;
+  step: number;
+  accentClass: string;
+}
+
+const SLIDER_FIELDS: ReadonlyArray<SliderFieldConfig> = [
+  {
+    id: 'calc-transit',
+    key: 'carKmReplacedByTransitPerWeek',
+    label: 'Car km replaced by public transit / week',
+    unit: 'km',
+    unitDescription: 'kilometers per week',
+    min: 0,
+    max: 250,
+    step: 2,
+    accentClass: 'accent-[#102A43]',
+  },
+  {
+    id: 'calc-carpool',
+    key: 'carKmCarpoolPerWeek',
+    label: 'Solo driving shifted to carpool / week',
+    unit: 'km',
+    unitDescription: 'kilometers per week',
+    min: 0,
+    max: 200,
+    step: 2,
+    accentClass: 'accent-[#102A43]',
+  },
+  {
+    id: 'calc-active',
+    key: 'carKmReplacedByWalkCyclePerWeek',
+    label: 'Car km replaced by walking/cycling / week',
+    unit: 'km',
+    unitDescription: 'kilometers per week',
+    min: 0,
+    max: 100,
+    step: 1,
+    accentClass: 'accent-[#20C997]',
+  },
+  {
+    id: 'calc-kwh',
+    key: 'electricitySavedKwhPerWeek',
+    label: 'Electricity consumption reduced / week',
+    unit: 'kWh',
+    unitDescription: 'kilowatt-hours per week',
+    min: 0,
+    max: 100,
+    step: 1,
+    accentClass: 'accent-[#38BDF8]',
+  },
+];
 
 export function CalculatorPage({ input, onChangeInput, onResetInput }: CalculatorPageProps) {
   const [showChartTable, setShowChartTable] = useState(false);
@@ -137,77 +203,35 @@ export function CalculatorPage({ input, onChangeInput, onResetInput }: Calculato
           </div>
 
           <div className="mt-4 space-y-4 text-sm">
-            <div>
-              <label htmlFor="calc-transit" className="flex justify-between font-medium text-[#102A43]">
-                <span>Car km replaced by public transit / week</span>
-                <span className="font-mono text-slate-700 tabular-nums">{input.carKmReplacedByTransitPerWeek} km</span>
-              </label>
-              <input
-                id="calc-transit"
-                type="range"
-                min={0}
-                max={250}
-                step={2}
-                value={input.carKmReplacedByTransitPerWeek}
-                aria-valuetext={`${input.carKmReplacedByTransitPerWeek} kilometers per week`}
-                onChange={(e) => updateField('carKmReplacedByTransitPerWeek', Number(e.target.value))}
-                className="mt-1.5 w-full accent-[#102A43] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8]"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="calc-carpool" className="flex justify-between font-medium text-[#102A43]">
-                <span>Solo driving shifted to carpool / week</span>
-                <span className="font-mono text-slate-700 tabular-nums">{input.carKmCarpoolPerWeek} km</span>
-              </label>
-              <input
-                id="calc-carpool"
-                type="range"
-                min={0}
-                max={200}
-                step={2}
-                value={input.carKmCarpoolPerWeek}
-                aria-valuetext={`${input.carKmCarpoolPerWeek} kilometers per week`}
-                onChange={(e) => updateField('carKmCarpoolPerWeek', Number(e.target.value))}
-                className="mt-1.5 w-full accent-[#102A43] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8]"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="calc-active" className="flex justify-between font-medium text-[#102A43]">
-                <span>Car km replaced by walking/cycling / week</span>
-                <span className="font-mono text-slate-700 tabular-nums">{input.carKmReplacedByWalkCyclePerWeek} km</span>
-              </label>
-              <input
-                id="calc-active"
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={input.carKmReplacedByWalkCyclePerWeek}
-                aria-valuetext={`${input.carKmReplacedByWalkCyclePerWeek} kilometers per week`}
-                onChange={(e) => updateField('carKmReplacedByWalkCyclePerWeek', Number(e.target.value))}
-                className="mt-1.5 w-full accent-[#20C997] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8]"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="calc-kwh" className="flex justify-between font-medium text-[#102A43]">
-                <span>Electricity consumption reduced / week</span>
-                <span className="font-mono text-slate-700 tabular-nums">{input.electricitySavedKwhPerWeek} kWh</span>
-              </label>
-              <input
-                id="calc-kwh"
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={input.electricitySavedKwhPerWeek}
-                aria-valuetext={`${input.electricitySavedKwhPerWeek} kilowatt-hours per week`}
-                onChange={(e) => updateField('electricitySavedKwhPerWeek', Number(e.target.value))}
-                className="mt-1.5 w-full accent-[#38BDF8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8]"
-              />
-            </div>
+            {SLIDER_FIELDS.map((field) => {
+              const value = input[field.key];
+              return (
+                <div key={field.id}>
+                  <label htmlFor={field.id} className="flex justify-between font-medium text-[#102A43]">
+                    <span>{field.label}</span>
+                    <span className="font-mono text-slate-700 tabular-nums">
+                      {value} {field.unit}
+                    </span>
+                  </label>
+                  <input
+                    id={field.id}
+                    type="range"
+                    min={field.min}
+                    max={field.max}
+                    step={field.step}
+                    value={value}
+                    aria-valuetext={`${value} ${field.unitDescription}`}
+                    onChange={(e) =>
+                      updateField(
+                        field.key,
+                        clampFiniteNumber(Number(e.target.value), field.min, field.max, 0)
+                      )
+                    }
+                    className={`mt-1.5 w-full ${field.accentClass} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8]`}
+                  />
+                </div>
+              );
+            })}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -221,8 +245,7 @@ export function CalculatorPage({ input, onChangeInput, onResetInput }: Calculato
                   max={200}
                   value={input.ledBulbsReplacedCount}
                   onChange={(e) => {
-                    const val = Number(e.target.value);
-                    updateField('ledBulbsReplacedCount', Number.isFinite(val) ? Math.max(0, Math.min(200, val)) : 0);
+                    updateField('ledBulbsReplacedCount', clampFiniteNumber(Number(e.target.value), 0, 200, 0));
                   }}
                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm text-[#102A43] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8]"
                 />
@@ -239,8 +262,7 @@ export function CalculatorPage({ input, onChangeInput, onResetInput }: Calculato
                   max={500}
                   value={input.wasteReducedKgPerWeek}
                   onChange={(e) => {
-                    const val = Number(e.target.value);
-                    updateField('wasteReducedKgPerWeek', Number.isFinite(val) ? Math.max(0, Math.min(500, val)) : 0);
+                    updateField('wasteReducedKgPerWeek', clampFiniteNumber(Number(e.target.value), 0, 500, 0));
                   }}
                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm text-[#102A43] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8]"
                 />
@@ -273,8 +295,7 @@ export function CalculatorPage({ input, onChangeInput, onResetInput }: Calculato
                   max={20}
                   value={input.householdSize}
                   onChange={(e) => {
-                    const val = Number(e.target.value);
-                    updateField('householdSize', Number.isFinite(val) ? Math.max(1, Math.min(20, Math.round(val))) : 1);
+                    updateField('householdSize', clampFiniteInt(Number(e.target.value), 1, 20, 1));
                   }}
                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm text-[#102A43] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8]"
                 />
@@ -391,10 +412,10 @@ export function CalculatorPage({ input, onChangeInput, onResetInput }: Calculato
                 <tbody className="divide-y divide-slate-100">
                   {result.breakdown.map((row) => (
                     <tr key={row.id}>
-                      <td className="py-2 pr-3">
+                      <th scope="row" className="py-2 pr-3 font-normal text-left">
                         <div className="font-medium text-[#102A43]">{row.label}</div>
                         <div className="text-[11px] text-slate-600">{row.factorSummary}</div>
-                      </td>
+                      </th>
                       <td className="py-2 px-2 text-right font-mono tabular-nums">{row.baselineKgPerWeek}</td>
                       <td className="py-2 px-2 text-right font-mono tabular-nums">{row.alternativeKgPerWeek}</td>
                       <td className="py-2 pl-2 text-right font-mono font-semibold text-emerald-700 tabular-nums">

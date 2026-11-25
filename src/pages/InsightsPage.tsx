@@ -15,6 +15,7 @@ import { buildCsvString, downloadTextFile } from '../lib/download.ts';
 import { slugifyCity } from '../lib/format.ts';
 import { SafeImage } from '../components/SafeImage.tsx';
 import { AccessibleHourlyTable } from '../components/AccessibleHourlyTable.tsx';
+import { CityComparisonCard } from '../components/CityComparisonCard.tsx';
 
 interface InsightsPageProps {
   snapshot: EnvironmentalSnapshot;
@@ -191,6 +192,8 @@ export function InsightsPage({ snapshot }: InsightsPageProps) {
 
         {showTable && <AccessibleHourlyTable rows={chartData} mode="dispersion" />}
       </section>
+
+      <CityComparisonCard primarySnapshot={snapshot} />
 
       {/* Weather Pattern & Preventive Actions */}
       <section className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-12">

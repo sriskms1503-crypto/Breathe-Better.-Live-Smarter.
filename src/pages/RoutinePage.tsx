@@ -1,9 +1,17 @@
 import { useMemo } from 'react';
-import { CalendarClock, CheckCircle2, Circle, SlidersHorizontal } from 'lucide-react';
+import { CalendarClock, CheckCircle2, Circle, Download, SlidersHorizontal } from 'lucide-react';
 import type { EnvironmentalSnapshot, FamilyProfile, PageId, RoutineSlot } from '../types/airwise.ts';
-import { buildDailyRoutine, formatHouseholdGroups } from '../lib/recommendations.ts';
+import {
+  buildDailyRoutine,
+  formatDailyRoutineMarkdown,
+  formatHouseholdGroups,
+} from '../lib/recommendations.ts';
+import { downloadTextFile } from '../lib/download.ts';
+import { slugifyCity } from '../lib/format.ts';
+import { ROUTINE_SUITABILITY_STYLES } from '../lib/statusStyles.ts';
 import { RecommendationCard } from '../components/RecommendationCard.tsx';
 import { AqiStatusBadge } from '../components/AqiBadge.tsx';
+import { ProgressBar } from '../components/ProgressBar.tsx';
 import { SafeImage } from '../components/SafeImage.tsx';
 
 interface RoutinePageProps {
@@ -23,6 +31,15 @@ export function RoutinePage({
 }: RoutinePageProps) {
   const slots = useMemo(() => buildDailyRoutine(snapshot, profile), [snapshot, profile]);
   const progressPct = Math.round((completedPeriods.length / slots.length) * 100);
+
+  function handleExportPlan() {
+    const markdown = formatDailyRoutineMarkdown(snapshot, profile, slots);
+    downloadTextFile(
+      markdown,
+      `airwise-daily-routine-${slugifyCity(snapshot.location.name)}.md`,
+      'text/markdown;charset=utf-8'
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -54,6 +71,14 @@ export function RoutinePage({
               <AqiStatusBadge category={snapshot.cpcbCategory} aqi={snapshot.cpcbAqi} />
               <button
                 type="button"
+                onClick={handleExportPlan}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-[#102A43] hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8] whitespace-nowrap"
+              >
+                <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Export Plan</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => onNavigate('settings')}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-[#102A43] hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8] whitespace-nowrap"
               >
@@ -70,19 +95,11 @@ export function RoutinePage({
                 {completedPeriods.length} / {slots.length} periods ({progressPct}%)
               </span>
             </div>
-            <div
-              className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-slate-100"
-              role="progressbar"
-              aria-label="Daily routine completion progress"
-              aria-valuenow={progressPct}
-              aria-valuemin={0}
-              aria-valuemax={100}
-            >
-              <div
-                className="h-full rounded-full bg-[#20C997] transition-all duration-200"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
+            <ProgressBar
+              value={progressPct}
+              label="Daily routine completion progress"
+              className="mt-1.5"
+            />
           </div>
         </div>
       </div>
@@ -90,12 +107,7 @@ export function RoutinePage({
       <div className="space-y-6">
         {slots.map((slot) => {
           const isDone = completedPeriods.includes(slot.period);
-          const suitabilityStyle =
-            slot.airSuitability === 'Avoid Outdoor Exposure'
-              ? 'bg-red-50 text-red-900 border-red-200'
-              : slot.airSuitability === 'Caution'
-                ? 'bg-amber-50 text-amber-900 border-amber-200'
-                : 'bg-emerald-50 text-emerald-900 border-emerald-200';
+          const suitabilityStyle = ROUTINE_SUITABILITY_STYLES[slot.airSuitability];
 
           return (
             <section

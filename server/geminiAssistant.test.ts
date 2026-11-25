@@ -126,4 +126,27 @@ test('generateAssistantAdvice parses valid Gemini JSON, retries transient errors
   };
   const fallbackReply = await generateAssistantAdvice(SAMPLE_PAYLOAD, malformedClient);
   assert.equal(fallbackReply.source, 'rule-engine-fallback');
+
+  // Non-transient 400 error should NOT retry
+  let nonTransientCalls = 0;
+  const nonTransientClient: GeminiClientLike = {
+    models: {
+      generateContent: async () => {
+        nonTransientCalls += 1;
+        throw new Error('HTTP 400 Invalid request argument');
+      },
+    },
+  };
+  const moderateFallback = await generateAssistantAdvice(
+    {
+      ...SAMPLE_PAYLOAD,
+      cpcbAqi: 155,
+      cpcbCategory: 'Moderate',
+      windSpeedKmh: 14,
+    },
+    nonTransientClient
+  );
+  assert.equal(nonTransientCalls, 1);
+  assert.equal(moderateFallback.source, 'rule-engine-fallback');
+  assert.ok(moderateFallback.recommendation.what.toLowerCase().includes('moderate'));
 });

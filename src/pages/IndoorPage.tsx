@@ -3,6 +3,7 @@ import { AlertTriangle, CheckSquare, ShieldCheck, Square, Wind } from 'lucide-re
 import type { EnvironmentalSnapshot, IndoorRoomTask } from '../types/airwise.ts';
 import { findOptimalVentilationWindow } from '../lib/exposure.ts';
 import { SafeImage } from '../components/SafeImage.tsx';
+import { ProgressBar } from '../components/ProgressBar.tsx';
 import { useTabNavigation } from '../hooks/useTabNavigation.ts';
 
 interface IndoorPageProps {
@@ -95,19 +96,12 @@ export function IndoorPage({ snapshot, tasks, onToggleTask }: IndoorPageProps) {
           <p className="mt-1 text-xs text-slate-600">
             {completedCount} of {tasks.length} indoor air actions completed
           </p>
-          <div
-            className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-100"
-            role="progressbar"
-            aria-label="Indoor air protection progress"
-            aria-valuenow={progressPct}
-            aria-valuemin={0}
-            aria-valuemax={100}
-          >
-            <div
-              className="h-full rounded-full bg-[#20C997] transition-all duration-200"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
+          <ProgressBar
+            value={progressPct}
+            label="Indoor air protection progress"
+            heightClass="h-2.5"
+            className="mt-3"
+          />
 
           <dl className="mt-5 space-y-2 border-t border-slate-100 pt-4 text-xs">
             <div className="flex justify-between">

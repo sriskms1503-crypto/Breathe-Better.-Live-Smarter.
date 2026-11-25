@@ -3,6 +3,7 @@ import { Check, Copy, Download, Shield, Users } from 'lucide-react';
 import { COMMUNITY_CHALLENGES, type CommunityChallenge } from '../data/presets.ts';
 import type { EnvironmentalSnapshot } from '../types/airwise.ts';
 import { SafeImage } from '../components/SafeImage.tsx';
+import { ProgressBar } from '../components/ProgressBar.tsx';
 import { downloadTextFile } from '../lib/download.ts';
 import { escapeXml } from '../lib/format.ts';
 import { useTabNavigation } from '../hooks/useTabNavigation.ts';
@@ -161,19 +162,11 @@ export function CommunityPage({
           <p className="mt-1 font-mono text-3xl font-bold text-[#102A43] tabular-nums">
             {joinedChallengeIds.length} / {COMMUNITY_CHALLENGES.length}
           </p>
-          <div
-            className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-slate-100"
-            role="progressbar"
-            aria-label="Weekly challenge CO2e contribution"
-            aria-valuenow={personalProgressPct}
-            aria-valuemin={0}
-            aria-valuemax={100}
-          >
-            <div
-              className="h-full rounded-full bg-[#20C997] transition-all duration-200"
-              style={{ width: `${personalProgressPct}%` }}
-            />
-          </div>
+          <ProgressBar
+            value={personalProgressPct}
+            label="Weekly challenge CO2e contribution"
+            className="mt-2.5"
+          />
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-5">

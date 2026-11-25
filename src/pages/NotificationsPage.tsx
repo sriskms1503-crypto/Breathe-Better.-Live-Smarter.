@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Bell, CheckCheck, SlidersHorizontal } from 'lucide-react';
 import type { AlertPreferences, PageId, SmartAlert } from '../types/airwise.ts';
 import { formatSafeTime } from '../lib/format.ts';
+import { ALERT_SEVERITY_STYLES } from '../lib/statusStyles.ts';
 
 interface NotificationsPageProps {
   alerts: SmartAlert[];
@@ -112,14 +113,7 @@ export function NotificationsPage({
           </div>
         ) : (
           enabledAlerts.map((alert) => {
-            const sevStyle =
-              alert.severity === 'Critical'
-                ? 'bg-red-50 text-red-900 border-red-200'
-                : alert.severity === 'Warning'
-                  ? 'bg-amber-50 text-amber-900 border-amber-200'
-                  : alert.severity === 'Advisory'
-                    ? 'bg-sky-50 text-sky-900 border-sky-200'
-                    : 'bg-emerald-50 text-emerald-900 border-emerald-200';
+            const sevStyle = ALERT_SEVERITY_STYLES[alert.severity];
 
             return (
               <article

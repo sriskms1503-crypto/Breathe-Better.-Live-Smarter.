@@ -22,43 +22,40 @@ const HOUSEHOLD_LABELS: Record<HouseholdGroup, string> = {
   dailyCommuters: 'Daily commuters',
 };
 
+/**
+ * Formats selected household profile groups into a readable summary label.
+ */
 export function formatHouseholdGroups(groups: HouseholdGroup[]): string {
   if (!groups.length) return 'General household';
   return groups.map((g) => HOUSEHOLD_LABELS[g] ?? g).join(', ');
 }
 
-export function buildDailyRoutine(
+interface RoutineContext {
+  aqi: number;
+  wind: number;
+  highRisk: boolean;
+  elevated: boolean;
+  hasChildren: boolean;
+  hasOlder: boolean;
+  hasSensitive: boolean;
+  isCommuter: boolean;
+  isFitness: boolean;
+  isOutdoorWorker: boolean;
+  isWfh: boolean;
+}
+
+function buildMorningSlot(
   snapshot: EnvironmentalSnapshot,
-  profile: FamilyProfile
-): RoutineSlot[] {
-  const aqi = snapshot.cpcbAqi ?? 120;
-  const category = snapshot.cpcbCategory;
-  const wind = snapshot.weather.windSpeedKmh ?? 8;
-  const hasChildren = profile.groups.includes('children');
-  const hasOlder = profile.groups.includes('olderAdults');
-  const hasSensitive = profile.groups.includes('respiratorySensitivities');
-  const isCommuter = profile.groups.includes('dailyCommuters');
-  const isFitness = profile.groups.includes('fitnessEnthusiasts');
-  const isOutdoorWorker = profile.groups.includes('outdoorWorkers');
-
-  const highRisk = aqi > 200;
-  const elevated = aqi > 100 && aqi <= 200;
-
-  const morningSuitability = highRisk
+  ctx: RoutineContext
+): RoutineSlot {
+  const { aqi, highRisk, elevated, hasChildren, hasOlder, hasSensitive, isFitness } = ctx;
+  const airSuitability: RoutineSlot['airSuitability'] = highRisk
     ? 'Avoid Outdoor Exposure'
     : elevated || hasSensitive || hasChildren || hasOlder
       ? 'Caution'
       : 'Suitable';
 
-  const afternoonSuitability = aqi > 300
-    ? 'Avoid Outdoor Exposure'
-    : aqi > 150 || (wind < 6 && aqi > 100)
-      ? 'Caution'
-      : 'Suitable';
-
-  const eveningSuitability = aqi > 200 ? 'Avoid Outdoor Exposure' : elevated ? 'Caution' : 'Suitable';
-
-  const morningActions: StructuredRecommendation[] = [
+  const actions: StructuredRecommendation[] = [
     {
       id: 'morning-check',
       title: highRisk ? 'Move morning exercise indoors' : 'Time morning outdoor activity carefully',
@@ -75,12 +72,12 @@ export function buildDailyRoutine(
         : 'Reduces peak roadside particulate intake during morning rush hour.',
       estimatedImpact: 'Exercise increases breathing volume 3–6x; shifting indoors during Poor+ AQI cuts active PM2.5 inhalation substantially.',
       confidenceAndLimitations: 'High confidence for exposure reduction; exact indoor PM2.5 depends on window sealing and filtration.',
-      factBasis: `Current CPCB AQI is ${snapshot.cpcbAqi ?? 'unavailable'} (${category}), PM2.5 is ${snapshot.pollutants.pm25 ?? 'N/A'} µg/m³.`,
+      factBasis: `Current CPCB AQI is ${snapshot.cpcbAqi ?? 'unavailable'} (${snapshot.cpcbCategory}), PM2.5 is ${snapshot.pollutants.pm25 ?? 'N/A'} µg/m³.`,
     },
   ];
 
   if (isFitness && (highRisk || elevated)) {
-    morningActions.push({
+    actions.push({
       id: 'morning-fitness',
       title: 'Adapt athletic training intensity',
       priority: 'High',
@@ -94,14 +91,41 @@ export function buildDailyRoutine(
     });
   }
 
-  const afternoonActions: StructuredRecommendation[] = [
+  return {
+    period: 'Morning',
+    timeWindow: '06:00 – 11:00',
+    airSuitability,
+    summary: highRisk
+      ? `Elevated morning pollution risk (AQI ${aqi}) — keep exercise and children indoors.`
+      : elevated
+        ? 'Moderate morning particulates — favor low-traffic corridors.'
+        : 'Favorable morning air — good window for outdoor movement.',
+    actions,
+  };
+}
+
+function buildAfternoonSlot(
+  snapshot: EnvironmentalSnapshot,
+  ctx: RoutineContext
+): RoutineSlot {
+  const { aqi, wind, highRisk, isCommuter, isOutdoorWorker, isWfh } = ctx;
+  const airSuitability: RoutineSlot['airSuitability'] =
+    aqi > 300
+      ? 'Avoid Outdoor Exposure'
+      : aqi > 150 || (wind < 6 && aqi > 100)
+        ? 'Caution'
+        : 'Suitable';
+
+  const actions: StructuredRecommendation[] = [
     {
       id: 'afternoon-commute',
       title: isCommuter || isOutdoorWorker ? 'Use lower-traffic commute corridors' : 'Plan midday errands efficiently',
       priority: highRisk ? 'High' : 'Moderate',
       what: isCommuter
         ? 'Use metro/rail or closed-cabin public transit where available, combine errands into one trip, and avoid idling in congested intersections.'
-        : 'Schedule essential outdoor errands during midday dispersion windows rather than peak traffic hours.',
+        : isWfh
+          ? 'Keep work-from-home study air fresh via targeted midday cross-ventilation only if AQI <= 100, and batch errands cleanly.'
+          : 'Schedule essential outdoor errands during midday dispersion windows rather than peak traffic hours.',
       why: `Wind speed is ${wind} km/h. Road corridors carry elevated NO2 and fresh tailpipe particulates compared to residential blocks.`,
       when: '12:00 to 16:00 local time (usually better vertical mixing than dawn/dusk).',
       expectedBenefits: 'Lowers both personal traffic exhaust exposure and per-trip tailpipe emissions.',
@@ -112,7 +136,7 @@ export function buildDailyRoutine(
   ];
 
   if (isOutdoorWorker && aqi > 150) {
-    afternoonActions.push({
+    actions.push({
       id: 'afternoon-worker',
       title: 'Wear a well-fitting particulate respirator (N95/FFP2)',
       priority: 'Urgent',
@@ -122,11 +146,28 @@ export function buildDailyRoutine(
       expectedBenefits: 'Significantly reduces inhaled particulate matter when outdoor presence is unavoidable.',
       estimatedImpact: 'Properly sealed N95 respirators filter >=95% of test particulates under standard fit conditions.',
       confidenceAndLimitations: 'Real-world protection drops if facial seal is compromised; replace masks when damp or soiled.',
-      factBasis: `CPCB AQI ${aqi} (${category}).`,
+      factBasis: `CPCB AQI ${aqi} (${snapshot.cpcbCategory}).`,
     });
   }
 
-  const eveningActions: StructuredRecommendation[] = [
+  return {
+    period: 'Afternoon',
+    timeWindow: '11:00 – 17:00',
+    airSuitability,
+    summary:
+      wind >= 10
+        ? 'Stronger afternoon breeze aids dispersion; still avoid heavy traffic corridors.'
+        : 'Light winds limit dispersion — minimize roadside idling and combine trips.',
+    actions,
+  };
+}
+
+function buildEveningSlot(
+  snapshot: EnvironmentalSnapshot,
+  ctx: RoutineContext
+): RoutineSlot {
+  const { aqi, highRisk, elevated } = ctx;
+  const actions: StructuredRecommendation[] = [
     {
       id: 'evening-ventilation',
       title: aqi <= 100 ? 'Cross-ventilate living spaces briefly' : 'Keep windows closed & dampen dust',
@@ -147,62 +188,75 @@ export function buildDailyRoutine(
     },
   ];
 
-  const nightActions: StructuredRecommendation[] = [
-    {
-      id: 'night-bedroom',
-      title: profile.hasPurifier ? 'Run bedroom HEPA purifier on sleep mode' : 'Prepare clean-air sleep zone',
-      priority: highRisk || hasChildren || hasOlder ? 'High' : 'Moderate',
-      what: profile.hasPurifier
-        ? 'Set your HEPA purifier to continuous quiet/sleep speed with bedroom doors closed and avoid burning incense or candles.'
-        : 'Keep bedroom windows latched during overnight smog hours, wipe bedside surfaces with a damp cloth, and maintain 40–55% relative humidity.',
-      why: 'Households spend 7–9 continuous hours in bedrooms overnight while ambient winter smog frequently peaks between midnight and 07:00.',
-      when: '21:30 until morning wake-up.',
-      expectedBenefits: 'Supports cleaner overnight breathing environment for children, older adults, and sensitive individuals.',
-      estimatedImpact: 'Maintaining a clean-air bedroom provides 8 hours of reduced particulate exposure daily.',
-      confidenceAndLimitations: 'True HEPA filtration captures particulates (PM2.5/PM10) but not gases (NO2/CO) unless equipped with sufficient activated carbon.',
-      factBasis: `Outdoor humidity ${snapshot.weather.humidityPercent ?? 'N/A'}%; tomorrow forecast peak is tracked in Insights.`,
-    },
-  ];
+  return {
+    period: 'Evening',
+    timeWindow: '17:00 – 21:30',
+    airSuitability: highRisk ? 'Avoid Outdoor Exposure' : elevated ? 'Caution' : 'Suitable',
+    summary:
+      aqi <= 100
+        ? 'Suitable for brief cross-ventilation before late-evening traffic.'
+        : 'Keep home sealed against evening smog buildup; vent kitchen cooking fumes.',
+    actions,
+  };
+}
+
+function buildNightSlot(
+  snapshot: EnvironmentalSnapshot,
+  profile: FamilyProfile,
+  ctx: RoutineContext
+): RoutineSlot {
+  const { highRisk, hasChildren, hasOlder } = ctx;
+  return {
+    period: 'Night',
+    timeWindow: '21:30 – 06:00',
+    airSuitability: highRisk ? 'Avoid Outdoor Exposure' : 'Caution',
+    summary: 'Protect overnight sleep air quality and check tomorrow’s AQI forecast.',
+    actions: [
+      {
+        id: 'night-bedroom',
+        title: profile.hasPurifier ? 'Run bedroom HEPA purifier on sleep mode' : 'Prepare clean-air sleep zone',
+        priority: highRisk || hasChildren || hasOlder ? 'High' : 'Moderate',
+        what: profile.hasPurifier
+          ? 'Set your HEPA purifier to continuous quiet/sleep speed with bedroom doors closed and avoid burning incense or candles.'
+          : 'Keep bedroom windows latched during overnight smog hours, wipe bedside surfaces with a damp cloth, and maintain 40–55% relative humidity.',
+        why: 'Households spend 7–9 continuous hours in bedrooms overnight while ambient winter smog frequently peaks between midnight and 07:00.',
+        when: '21:30 until morning wake-up.',
+        expectedBenefits: 'Supports cleaner overnight breathing environment for children, older adults, and sensitive individuals.',
+        estimatedImpact: 'Maintaining a clean-air bedroom provides 8 hours of reduced particulate exposure daily.',
+        confidenceAndLimitations: 'True HEPA filtration captures particulates (PM2.5/PM10) but not gases (NO2/CO) unless equipped with sufficient activated carbon.',
+        factBasis: `Outdoor humidity ${snapshot.weather.humidityPercent ?? 'N/A'}%; tomorrow forecast peak is tracked in Insights.`,
+      },
+    ],
+  };
+}
+
+/**
+ * Generates a 4-period (Morning to Night) daily protection routine tailored to live conditions and household profile.
+ */
+export function buildDailyRoutine(
+  snapshot: EnvironmentalSnapshot,
+  profile: FamilyProfile
+): RoutineSlot[] {
+  const aqi = snapshot.cpcbAqi ?? 120;
+  const ctx: RoutineContext = {
+    aqi,
+    wind: snapshot.weather.windSpeedKmh ?? 8,
+    highRisk: aqi > 200,
+    elevated: aqi > 100 && aqi <= 200,
+    hasChildren: profile.groups.includes('children'),
+    hasOlder: profile.groups.includes('olderAdults'),
+    hasSensitive: profile.groups.includes('respiratorySensitivities'),
+    isCommuter: profile.groups.includes('dailyCommuters'),
+    isFitness: profile.groups.includes('fitnessEnthusiasts'),
+    isOutdoorWorker: profile.groups.includes('outdoorWorkers'),
+    isWfh: profile.groups.includes('workFromHome'),
+  };
 
   return [
-    {
-      period: 'Morning',
-      timeWindow: '06:00 – 11:00',
-      airSuitability: morningSuitability,
-      summary: highRisk
-        ? 'Elevated morning pollution risk — keep exercise and children indoors.'
-        : elevated
-          ? 'Moderate morning particulates — favor low-traffic corridors.'
-          : 'Favorable morning air — good window for outdoor movement.',
-      actions: morningActions,
-    },
-    {
-      period: 'Afternoon',
-      timeWindow: '11:00 – 17:00',
-      airSuitability: afternoonSuitability,
-      summary:
-        wind >= 10
-          ? 'Stronger afternoon breeze aids dispersion; still avoid heavy traffic corridors.'
-          : 'Light winds limit dispersion — minimize roadside idling and combine trips.',
-      actions: afternoonActions,
-    },
-    {
-      period: 'Evening',
-      timeWindow: '17:00 – 21:30',
-      airSuitability: eveningSuitability,
-      summary:
-        aqi <= 100
-          ? 'Suitable for brief cross-ventilation before late-evening traffic.'
-          : 'Keep home sealed against evening smog buildup; vent kitchen cooking fumes.',
-      actions: eveningActions,
-    },
-    {
-      period: 'Night',
-      timeWindow: '21:30 – 06:00',
-      airSuitability: highRisk ? 'Avoid Outdoor Exposure' : 'Caution',
-      summary: 'Protect overnight sleep air quality and check tomorrow’s AQI forecast.',
-      actions: nightActions,
-    },
+    buildMorningSlot(snapshot, ctx),
+    buildAfternoonSlot(snapshot, ctx),
+    buildEveningSlot(snapshot, ctx),
+    buildNightSlot(snapshot, profile, ctx),
   ];
 }
 
@@ -481,6 +535,78 @@ export function buildSmartAlerts(snapshot: EnvironmentalSnapshot): SmartAlert[] 
   return alerts;
 }
 
+function computeShortTermTrend(validHourly: EnvironmentalSnapshot['hourly']): {
+  trendDirection: 'Rising' | 'Improving' | 'Stable' | 'Insufficient Data';
+  trendDeltaPercent: number | null;
+} {
+  const past = validHourly.filter((h) => !h.isForecast);
+  const future = validHourly.filter((h) => h.isForecast);
+  if (past.length < 4 || future.length < 4) {
+    return { trendDirection: 'Insufficient Data', trendDeltaPercent: null };
+  }
+
+  const recentAvg =
+    past.slice(-6).reduce((s, p) => s + (p.pm25 ?? 0), 0) / Math.min(6, past.length);
+  const nextAvg =
+    future.slice(0, 6).reduce((s, p) => s + (p.pm25 ?? 0), 0) / Math.min(6, future.length);
+
+  if (recentAvg <= 0) {
+    return { trendDirection: 'Insufficient Data', trendDeltaPercent: null };
+  }
+
+  const trendDeltaPercent = Math.round(((nextAvg - recentAvg) / recentAvg) * 100);
+  if (trendDeltaPercent >= 12) return { trendDirection: 'Rising', trendDeltaPercent };
+  if (trendDeltaPercent <= -12) return { trendDirection: 'Improving', trendDeltaPercent };
+  return { trendDirection: 'Stable', trendDeltaPercent };
+}
+
+function assessStagnationRisk(wind: number, humidity: number): {
+  stagnationRisk: 'High' | 'Moderate' | 'Low';
+  weatherExplanation: string;
+} {
+  const stagnationRisk: 'High' | 'Moderate' | 'Low' =
+    wind < 6 && humidity > 65 ? 'High' : wind < 11 ? 'Moderate' : 'Low';
+  const weatherExplanation =
+    stagnationRisk === 'High'
+      ? `Low wind speeds (${wind} km/h) combined with elevated humidity (${humidity}%) trap urban particulates close to the ground, increasing winter smog persistence.`
+      : stagnationRisk === 'Moderate'
+        ? `Moderate air movement (${wind} km/h) provides partial dispersion, though rush-hour emissions can still accumulate in street canyons.`
+        : `Brisk winds (${wind} km/h) help dilute localized particulates, though upwind regional smoke can still affect readings.`;
+  return { stagnationRisk, weatherExplanation };
+}
+
+function computeCategoryDistribution(
+  validHourly: EnvironmentalSnapshot['hourly']
+): Array<{ category: AqiCategory; hours: number; color: string }> {
+  const counts: Record<AqiCategory, number> = {
+    Good: 0,
+    Satisfactory: 0,
+    Moderate: 0,
+    Poor: 0,
+    'Very Poor': 0,
+    Severe: 0,
+  };
+
+  for (const h of validHourly) {
+    const a = h.cpcbAqi ?? 0;
+    if (a <= 50) counts.Good++;
+    else if (a <= 100) counts.Satisfactory++;
+    else if (a <= 200) counts.Moderate++;
+    else if (a <= 300) counts.Poor++;
+    else if (a <= 400) counts['Very Poor']++;
+    else counts.Severe++;
+  }
+
+  return CPCB_CATEGORY_SCALE.map((entry) => ({
+    category: entry.name,
+    hours: counts[entry.name],
+    color: entry.hexColor,
+  }));
+}
+
+/**
+ * Analyzes 48-hour particulate trends, dispersion stagnation risk, and CPCB category distributions.
+ */
 export function analyzePollutionInsights(snapshot: EnvironmentalSnapshot): {
   trendDirection: 'Rising' | 'Improving' | 'Stable' | 'Insufficient Data';
   trendDeltaPercent: number | null;
@@ -491,24 +617,7 @@ export function analyzePollutionInsights(snapshot: EnvironmentalSnapshot): {
   categoryDistribution: Array<{ category: AqiCategory; hours: number; color: string }>;
 } {
   const valid = snapshot.hourly.filter((h) => h.pm25 !== null && h.cpcbAqi !== null);
-  const past = valid.filter((h) => !h.isForecast);
-  const future = valid.filter((h) => h.isForecast);
-
-  let trendDirection: 'Rising' | 'Improving' | 'Stable' | 'Insufficient Data' = 'Insufficient Data';
-  let trendDeltaPercent: number | null = null;
-
-  if (past.length >= 4 && future.length >= 4) {
-    const recentAvg =
-      past.slice(-6).reduce((s, p) => s + (p.pm25 ?? 0), 0) / Math.min(6, past.length);
-    const nextAvg =
-      future.slice(0, 6).reduce((s, p) => s + (p.pm25 ?? 0), 0) / Math.min(6, future.length);
-    if (recentAvg > 0) {
-      trendDeltaPercent = Math.round(((nextAvg - recentAvg) / recentAvg) * 100);
-      if (trendDeltaPercent >= 12) trendDirection = 'Rising';
-      else if (trendDeltaPercent <= -12) trendDirection = 'Improving';
-      else trendDirection = 'Stable';
-    }
-  }
+  const { trendDirection, trendDeltaPercent } = computeShortTermTrend(valid);
 
   let peakPoint = valid[0];
   let cleanestPoint = valid[0];
@@ -519,40 +628,7 @@ export function analyzePollutionInsights(snapshot: EnvironmentalSnapshot): {
 
   const wind = snapshot.weather.windSpeedKmh ?? 8;
   const humidity = snapshot.weather.humidityPercent ?? 60;
-  const stagnationRisk: 'High' | 'Moderate' | 'Low' =
-    wind < 6 && humidity > 65 ? 'High' : wind < 11 ? 'Moderate' : 'Low';
-
-  const weatherExplanation =
-    stagnationRisk === 'High'
-      ? `Low wind speeds (${wind} km/h) combined with elevated humidity (${humidity}%) trap urban particulates close to the ground, increasing winter smog persistence.`
-      : stagnationRisk === 'Moderate'
-        ? `Moderate air movement (${wind} km/h) provides partial dispersion, though rush-hour emissions can still accumulate in street canyons.`
-        : `Brisk winds (${wind} km/h) help dilute localized particulates, though upwind regional smoke can still affect readings.`;
-
-  const counts: Record<AqiCategory, number> = {
-    Good: 0,
-    Satisfactory: 0,
-    Moderate: 0,
-    Poor: 0,
-    'Very Poor': 0,
-    Severe: 0,
-  };
-
-  for (const h of valid) {
-    const a = h.cpcbAqi ?? 0;
-    if (a <= 50) counts.Good++;
-    else if (a <= 100) counts.Satisfactory++;
-    else if (a <= 200) counts.Moderate++;
-    else if (a <= 300) counts.Poor++;
-    else if (a <= 400) counts['Very Poor']++;
-    else counts.Severe++;
-  }
-
-  const categoryDistribution = CPCB_CATEGORY_SCALE.map((entry) => ({
-    category: entry.name,
-    hours: counts[entry.name],
-    color: entry.hexColor,
-  }));
+  const { stagnationRisk, weatherExplanation } = assessStagnationRisk(wind, humidity);
 
   return {
     trendDirection,
@@ -561,6 +637,42 @@ export function analyzePollutionInsights(snapshot: EnvironmentalSnapshot): {
     cleanestWindow: cleanestPoint ? `${cleanestPoint.label} (~${cleanestPoint.pm25} µg/m³ PM2.5)` : 'Insufficient data',
     stagnationRisk,
     weatherExplanation,
-    categoryDistribution,
+    categoryDistribution: computeCategoryDistribution(valid),
   };
+}
+
+/**
+ * Formats the generated daily protection routine into a clean portable Markdown summary.
+ */
+export function formatDailyRoutineMarkdown(
+  snapshot: EnvironmentalSnapshot,
+  profile: FamilyProfile,
+  slots: ReadonlyArray<RoutineSlot>
+): string {
+  const lines: string[] = [
+    `# AIRWISE AI — Daily Clean-Air Routine (${snapshot.location.name})`,
+    '',
+    `- **Data Status:** ${snapshot.dataStatus} (${snapshot.provider})`,
+    `- **CPCB AQI:** ${snapshot.cpcbAqi ?? 'Unavailable'} (${snapshot.cpcbCategory})`,
+    `- **US EPA AQI:** ${snapshot.usAqi ?? 'Unavailable'} (${snapshot.usCategory})`,
+    `- **Household Profile:** ${formatHouseholdGroups(profile.groups)} (${profile.householdSize} member${profile.householdSize === 1 ? '' : 's'})`,
+    '',
+  ];
+
+  for (const slot of slots) {
+    lines.push(`## ${slot.period} (${slot.timeWindow}) — ${slot.airSuitability}`);
+    lines.push(slot.summary);
+    lines.push('');
+    for (const action of slot.actions) {
+      lines.push(`### ${action.title} [${action.priority} Priority]`);
+      lines.push(`- **What:** ${action.what}`);
+      lines.push(`- **Why:** ${action.why}`);
+      lines.push(`- **When:** ${action.when}`);
+      lines.push(`- **Estimated Impact:** ${action.estimatedImpact}`);
+      lines.push(`- **Limitations:** ${action.confidenceAndLimitations}`);
+      lines.push('');
+    }
+  }
+
+  return lines.join('\n');
 }
