@@ -1,0 +1,10 @@
+{
+  "name": "AIRWISE AI",
+  "description": "Intelligent urban air quality, indoor air protection, and low-emission lifestyle assistant for families and communities.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
