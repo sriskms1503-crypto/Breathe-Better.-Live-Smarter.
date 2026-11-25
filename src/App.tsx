@@ -33,6 +33,103 @@ const SettingsPage = lazy(() =>
   import('./pages/SettingsPage.tsx').then((m) => ({ default: m.SettingsPage }))
 );
 
+type AirwiseState = ReturnType<typeof useAirwiseState>;
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled page id: ${String(value)}`);
+}
+
+function renderWorkspacePage(state: AirwiseState) {
+  switch (state.activePage) {
+    case 'landing':
+      return null;
+    case 'dashboard':
+      return (
+        <DashboardPage
+          snapshot={state.snapshot}
+          profile={state.profile}
+          loading={state.loadingFeed}
+          indoorProgressPercent={state.indoorProgressPercent}
+          sustainabilityScore={state.sustainabilityScore}
+          weeklyCo2SavedKg={state.weeklyCo2SavedKg}
+          onSelectLocation={state.setLocation}
+          onRefresh={state.refreshFeed}
+          onNavigate={state.navigate}
+        />
+      );
+    case 'assistant':
+      return <AssistantPage snapshot={state.snapshot} profile={state.profile} />;
+    case 'routine':
+      return (
+        <RoutinePage
+          snapshot={state.snapshot}
+          profile={state.profile}
+          completedPeriods={state.completedRoutinePeriods}
+          onTogglePeriod={state.toggleRoutinePeriod}
+          onNavigate={state.navigate}
+        />
+      );
+    case 'indoor':
+      return (
+        <IndoorPage
+          snapshot={state.snapshot}
+          tasks={state.indoorTasks}
+          onToggleTask={state.toggleIndoorTask}
+        />
+      );
+    case 'sustainability':
+      return (
+        <SustainabilityPage
+          snapshot={state.snapshot}
+          alternatives={state.alternatives}
+          onToggleAdopted={state.toggleAdoptedHabit}
+        />
+      );
+    case 'calculator':
+      return (
+        <CalculatorPage
+          input={state.calcInput}
+          onChangeInput={state.setCalcInput}
+          onResetInput={state.resetCalcInput}
+        />
+      );
+    case 'insights':
+      return <InsightsPage snapshot={state.snapshot} />;
+    case 'community':
+      return (
+        <CommunityPage
+          snapshot={state.snapshot}
+          joinedChallengeIds={state.joinedChallenges}
+          onToggleJoinChallenge={state.toggleJoinChallenge}
+        />
+      );
+    case 'notifications':
+      return (
+        <NotificationsPage
+          alerts={state.alerts}
+          preferences={state.alertPrefs}
+          onMarkRead={state.markAlertRead}
+          onMarkAllRead={state.markAllAlertsRead}
+          onUpdatePreferences={state.setAlertPrefs}
+          onNavigate={state.navigate}
+        />
+      );
+    case 'settings':
+      return (
+        <SettingsPage
+          profile={state.profile}
+          calcInput={state.calcInput}
+          alertPrefs={state.alertPrefs}
+          onUpdateProfile={state.updateProfile}
+          onImportPreferences={state.importPreferences}
+          onClearAllData={state.handleClearAllData}
+        />
+      );
+    default:
+      return assertNever(state.activePage);
+  }
+}
+
 export default function App() {
   const state = useAirwiseState();
 
@@ -62,91 +159,10 @@ export default function App() {
             </div>
           }
         >
-          {state.activePage === 'dashboard' && (
-            <DashboardPage
-              snapshot={state.snapshot}
-              profile={state.profile}
-              loading={state.loadingFeed}
-              indoorProgressPercent={state.indoorProgressPercent}
-              sustainabilityScore={state.sustainabilityScore}
-              weeklyCo2SavedKg={state.weeklyCo2SavedKg}
-              onSelectLocation={state.setLocation}
-              onRefresh={state.refreshFeed}
-              onNavigate={state.navigate}
-            />
-          )}
-
-          {state.activePage === 'assistant' && (
-            <AssistantPage snapshot={state.snapshot} profile={state.profile} />
-          )}
-
-          {state.activePage === 'routine' && (
-            <RoutinePage
-              snapshot={state.snapshot}
-              profile={state.profile}
-              completedPeriods={state.completedRoutinePeriods}
-              onTogglePeriod={state.toggleRoutinePeriod}
-              onNavigate={state.navigate}
-            />
-          )}
-
-          {state.activePage === 'indoor' && (
-            <IndoorPage
-              snapshot={state.snapshot}
-              tasks={state.indoorTasks}
-              onToggleTask={state.toggleIndoorTask}
-            />
-          )}
-
-          {state.activePage === 'sustainability' && (
-            <SustainabilityPage
-              snapshot={state.snapshot}
-              alternatives={state.alternatives}
-              onToggleAdopted={state.toggleAdoptedHabit}
-            />
-          )}
-
-          {state.activePage === 'calculator' && (
-            <CalculatorPage
-              input={state.calcInput}
-              onChangeInput={state.setCalcInput}
-              onResetInput={state.resetCalcInput}
-            />
-          )}
-
-          {state.activePage === 'insights' && <InsightsPage snapshot={state.snapshot} />}
-
-          {state.activePage === 'community' && (
-            <CommunityPage
-              snapshot={state.snapshot}
-              joinedChallengeIds={state.joinedChallenges}
-              onToggleJoinChallenge={state.toggleJoinChallenge}
-            />
-          )}
-
-          {state.activePage === 'notifications' && (
-            <NotificationsPage
-              alerts={state.alerts}
-              preferences={state.alertPrefs}
-              onMarkRead={state.markAlertRead}
-              onMarkAllRead={state.markAllAlertsRead}
-              onUpdatePreferences={state.setAlertPrefs}
-              onNavigate={state.navigate}
-            />
-          )}
-
-          {state.activePage === 'settings' && (
-            <SettingsPage
-              profile={state.profile}
-              calcInput={state.calcInput}
-              alertPrefs={state.alertPrefs}
-              onUpdateProfile={state.updateProfile}
-              onImportPreferences={state.importPreferences}
-              onClearAllData={state.handleClearAllData}
-            />
-          )}
+          {renderWorkspacePage(state)}
         </Suspense>
       </ErrorBoundary>
     </WorkspaceLayout>
   );
 }
+

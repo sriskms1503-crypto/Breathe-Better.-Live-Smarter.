@@ -3,6 +3,7 @@ import { LocateFixed, MapPin, Search } from 'lucide-react';
 import type { CityLocation } from '../types/airwise.ts';
 import { PRESET_CITIES } from '../data/presets.ts';
 import { isCoordinateInIndia } from '../lib/aqi.ts';
+import { searchCityLocations } from '../lib/airQualityClient.ts';
 
 interface LocationSelectorProps {
   currentLocation: CityLocation;
@@ -44,16 +45,12 @@ export function LocationSelector({
     setSearching(true);
     setFeedback(null);
     try {
-      const res = await fetch(`/api/locations/search?q=${encodeURIComponent(clean)}`, {
-        signal: controller.signal,
-      });
-      const data = (await res.json()) as { results?: CityLocation[]; error?: string };
+      const { results: list, error } = await searchCityLocations(clean, controller.signal);
       if (controller.signal.aborted) return;
-      if (!res.ok) {
-        setFeedback(data.error ?? 'Search failed.');
+      if (error) {
+        setFeedback(error);
         setResults([]);
       } else {
-        const list = data.results ?? [];
         setResults(list);
         if (list.length === 0) {
           setFeedback(`No cities found matching "${clean}". Try a nearby major city.`);

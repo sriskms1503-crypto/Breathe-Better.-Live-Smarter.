@@ -12,7 +12,7 @@ import {
 } from 'recharts';
 import { calculateCarbonImpact, type CarbonCalculatorInput } from '../lib/impact.ts';
 import { buildCsvString, downloadTextFile } from '../lib/download.ts';
-import { clampFiniteInt, clampFiniteNumber } from '../lib/format.ts';
+import { clampFiniteInt, clampFiniteNumber, parseGridRegion } from '../lib/format.ts';
 import { SafeImage } from '../components/SafeImage.tsx';
 
 interface CalculatorPageProps {
@@ -277,7 +277,7 @@ export function CalculatorPage({ input, onChangeInput, onResetInput }: Calculato
                 <select
                   id="calc-region"
                   value={input.gridRegion}
-                  onChange={(e) => updateField('gridRegion', e.target.value as 'INDIA' | 'GLOBAL')}
+                  onChange={(e) => updateField('gridRegion', parseGridRegion(e.target.value, input.gridRegion))}
                   className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs font-medium text-[#102A43] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8]"
                 >
                   <option value="INDIA">India CEA (0.716 kg/kWh)</option>

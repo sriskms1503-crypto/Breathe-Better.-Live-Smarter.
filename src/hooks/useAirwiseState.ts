@@ -17,6 +17,7 @@ import {
 } from '../lib/recommendations.ts';
 import type { CarbonCalculatorInput } from '../lib/impact.ts';
 import { calculateCarbonImpact } from '../lib/impact.ts';
+import { fetchAirQualitySnapshot } from '../lib/airQualityClient.ts';
 import { hasUnsafeObjectKeys, PersistedStateSchema } from '../lib/validation.ts';
 
 const STORAGE_KEY = 'airwise_ai_state_v1';
@@ -99,9 +100,13 @@ function loadPersistedState(): PersistedState {
   }
 }
 
+function isValidPageId(value: string): value is PageId {
+  return VALID_PAGES.some((page) => page === value);
+}
+
 function parseHashPage(): PageId | null {
-  const hash = window.location.hash.replace('#', '') as PageId;
-  return VALID_PAGES.includes(hash) ? hash : null;
+  const hash = window.location.hash.replace('#', '');
+  return isValidPageId(hash) ? hash : null;
 }
 
 export function useAirwiseState() {
@@ -160,22 +165,9 @@ export function useAirwiseState() {
 
     setLoadingFeed(true);
     try {
-      const qs = new URLSearchParams({
-        lat: String(targetLoc.latitude),
-        lon: String(targetLoc.longitude),
-        name: targetLoc.name,
-        region: targetLoc.region,
-        country: targetLoc.country,
-        countryCode: targetLoc.countryCode,
-        timezone: targetLoc.timezone,
-      });
-      const res = await fetch(`/api/air-quality?${qs.toString()}`, {
-        signal: controller.signal,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { snapshot?: EnvironmentalSnapshot };
+      const nextSnapshot = await fetchAirQualitySnapshot(targetLoc, controller.signal);
       if (!controller.signal.aborted) {
-        setSnapshot(data.snapshot ?? buildDemoFallbackSnapshot(targetLoc));
+        setSnapshot(nextSnapshot);
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -205,35 +197,57 @@ export function useAirwiseState() {
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
+  const persistedPayload = useMemo<PersistedState>(
+    () => ({
+      locationId: location.id,
+      customLocation: location,
+      profile,
+      completedTaskIds: indoorTasks.filter((t) => t.completed).map((t) => t.id),
+      completedRoutinePeriods,
+      adoptedHabitIds: alternatives.filter((a) => a.adopted).map((a) => a.id),
+      joinedChallengeIds: joinedChallenges,
+      readAlertIds,
+      calcInput,
+      alertPrefs,
+    }),
+    [
+      location,
+      profile,
+      indoorTasks,
+      completedRoutinePeriods,
+      alternatives,
+      joinedChallenges,
+      readAlertIds,
+      calcInput,
+      alertPrefs,
+    ]
+  );
+
+  const latestPayloadRef = useRef<PersistedState>(persistedPayload);
+  latestPayloadRef.current = persistedPayload;
+
   useEffect(() => {
-    try {
-      const payload: PersistedState = {
-        locationId: location.id,
-        customLocation: location,
-        profile,
-        completedTaskIds: indoorTasks.filter((t) => t.completed).map((t) => t.id),
-        completedRoutinePeriods,
-        adoptedHabitIds: alternatives.filter((a) => a.adopted).map((a) => a.id),
-        joinedChallengeIds: joinedChallenges,
-        readAlertIds,
-        calcInput,
-        alertPrefs,
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    } catch {
-      // Ignore storage quota errors
-    }
-  }, [
-    location,
-    profile,
-    indoorTasks,
-    completedRoutinePeriods,
-    alternatives,
-    joinedChallenges,
-    readAlertIds,
-    calcInput,
-    alertPrefs,
-  ]);
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(latestPayloadRef.current));
+      } catch {
+        // Ignore storage quota errors
+      }
+    }, 150);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [persistedPayload]);
+
+  useEffect(() => {
+    return () => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(latestPayloadRef.current));
+      } catch {
+        // Ignore storage quota errors
+      }
+    };
+  }, []);
 
   const navigate = useCallback((page: PageId) => {
     setActivePage(page);

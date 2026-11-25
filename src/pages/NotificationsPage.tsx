@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Bell, CheckCheck, SlidersHorizontal } from 'lucide-react';
 import type { AlertPreferences, PageId, SmartAlert } from '../types/airwise.ts';
 import { formatSafeTime } from '../lib/format.ts';
+import { filterAlertsByPreferences } from '../lib/recommendations.ts';
 import { ALERT_SEVERITY_STYLES } from '../lib/statusStyles.ts';
 
 interface NotificationsPageProps {
@@ -72,14 +73,7 @@ export function NotificationsPage({
     },
   ];
 
-  const enabledAlerts = alerts.filter((a) => {
-    if (a.type === 'severe_aqi') return preferences.severeAqi;
-    if (a.type === 'rising_pm25') return preferences.risingPm25;
-    if (a.type === 'forecast_alert') return preferences.forecastAlerts;
-    if (a.type === 'ventilation_window') return preferences.ventilationWindows;
-    if (a.type === 'filter_maintenance') return preferences.filterMaintenance;
-    return preferences.sustainabilityGoals;
-  });
+  const enabledAlerts = filterAlertsByPreferences(alerts, preferences);
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">

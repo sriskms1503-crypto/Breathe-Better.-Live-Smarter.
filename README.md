@@ -20,16 +20,16 @@ AIRWISE AI pairs live server-side atmospheric and weather telemetry with a Gemin
 
 ## 4. Key Features
 - **Landing Overview**: Editorial overview with live AQI preview and direct workspace entry.
-- **Smart AQI Dashboard**: Permission-based geolocation, manual global/Indian city search, CPCB NAQI (6 official categories) vs US EPA AQI vs WHO 2021 guideline comparisons, 6 pollutants, weather metrics, Recharts trend/distribution charts, and accessible table alternatives.
-- **AI Family Assistant**: Natural language Q&A grounded in current location telemetry, separating measured facts from estimates and avoiding unsupported medical claims.
-- **Smart Daily Routine Planner**: Dynamic Morning, Afternoon, Evening, and Night guidance tailored to household groups and weather dispersion.
-- **Indoor Air Quality Optimizer**: Ventilation decision advisor, HEPA/humidity guidance, and interactive 5-room checklist (Bedroom, Living room, Kitchen, Children's room, Workspace) with explicit limitations.
+- **Smart AQI Dashboard**: Permission-based geolocation, manual global/Indian city search, interactive monitoring hub map, CPCB NAQI (6 official categories) vs US EPA AQI vs WHO 2021 guideline comparisons, 6 pollutants, weather metrics, Recharts trend/distribution charts, accessible table views, and CSV export.
+- **AI Family Assistant**: Natural language Q&A grounded in current location telemetry, separating measured facts from estimates, avoiding unsupported medical claims, and exporting structured sessions as Markdown.
+- **Smart Daily Routine Planner**: Dynamic Morning, Afternoon, Evening, and Night guidance tailored to household groups and weather dispersion, with one-click Markdown routine export.
+- **Indoor Air Quality Optimizer**: Interactive 24-hour Personal PM2.5 Dose Simulator (respirator + HEPA + window sealing), optimal ventilation window advisor, and interactive 5-room checklist with explicit limitations.
 - **Low-Emission Lifestyle Engine**: Transport, Energy, and Household habit alternatives with documented calculation methodology and confidence levels.
-- **Environmental Impact Calculator**: Interactive `Baseline - Alternative` CO2e calculator across daily, weekly, monthly, annual, household, and 100-home community projections.
-- **Pollution Insights & Early Warning**: Trend direction, peak/cleanest windows, and wind/humidity stagnation risk derived strictly from provider feeds.
+- **Environmental Impact Calculator**: Interactive `Baseline - Alternative` CO2e calculator across daily, weekly, monthly, annual, household, and 100-home community projections with CSV breakdown export.
+- **Pollution Insights & Early Warning**: Live city-to-city benchmark comparison table, trend direction, peak/cleanest windows, and wind/humidity stagnation risk derived strictly from provider feeds.
 - **Community Hub**: Weekly neighborhood challenges, collective carbon estimates, and privacy-safe shareable SVG/text awareness cards.
 - **Smart Notification Center**: Configurable alerts for severe AQI, rising PM2.5, safe ventilation windows, filter maintenance, and sustainability goals.
-- **Settings & Privacy**: Voluntary household profile configuration, JSON preferences export, and one-click local data reset.
+- **Settings & Privacy**: Voluntary household profile configuration, schema-validated JSON preferences export/import, and one-click local data reset.
 
 ## 5. Technology Stack
 - **Frontend**: React 19, TypeScript, Vite, Tailwind CSS v4, Recharts, Lucide Icons
@@ -66,11 +66,11 @@ npm start
 ```
 
 ## 10. Testing Instructions
-Run unit and backend API integration tests using Node's native test runner via `tsx`:
+Run the full unit, integration, fuzz, accessibility, and backend API test suite:
 ```bash
-npx tsx --test src/lib/aqi.test.ts src/lib/impact.test.ts src/lib/recommendations.test.ts server/api.test.ts
+npm test
 ```
-Run TypeScript static type checking:
+Run strict TypeScript static type checking (`tsc --noEmit`):
 ```bash
 npm run lint
 ```

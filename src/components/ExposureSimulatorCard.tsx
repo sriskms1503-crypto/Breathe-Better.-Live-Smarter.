@@ -4,7 +4,7 @@ import {
   simulateDailyExposureDose,
   type RespiratorGrade,
 } from '../lib/exposure.ts';
-import { clampFiniteNumber } from '../lib/format.ts';
+import { clampFiniteNumber, parseRespiratorGrade } from '../lib/format.ts';
 import { ProgressBar } from './ProgressBar.tsx';
 
 interface ExposureSimulatorCardProps {
@@ -32,6 +32,7 @@ export function ExposureSimulatorCard({
   const [respirator, setRespirator] = useState<RespiratorGrade>('n95_ffp2');
   const [indoorHepaActive, setIndoorHepaActive] = useState(defaultHepaActive);
   const [windowsSealed, setWindowsSealed] = useState(true);
+  const [announcement, setAnnouncement] = useState('');
 
   const result = useMemo(
     () =>
@@ -50,6 +51,7 @@ export function ExposureSimulatorCard({
     setRespirator('n95_ffp2');
     setIndoorHepaActive(defaultHepaActive);
     setWindowsSealed(true);
+    setAnnouncement('Daily PM2.5 exposure simulator reset to default settings.');
   }
 
   return (
@@ -57,6 +59,9 @@ export function ExposureSimulatorCard({
       className="rounded-xl border border-slate-200 bg-white p-5 sm:p-6"
       aria-label="Interactive Daily PM2.5 Exposure Simulator"
     >
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {announcement}
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-emerald-700" aria-hidden="true" />
@@ -118,7 +123,7 @@ export function ExposureSimulatorCard({
             <select
               id="sim-respirator"
               value={respirator}
-              onChange={(e) => setRespirator(e.target.value as RespiratorGrade)}
+              onChange={(e) => setRespirator(parseRespiratorGrade(e.target.value, respirator))}
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-[#102A43] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8]"
             >
               {RESPIRATOR_OPTIONS.map((opt) => (

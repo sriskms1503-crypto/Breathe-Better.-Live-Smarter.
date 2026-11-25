@@ -118,12 +118,13 @@ export function isAllowedOrigin(
   }
 
   if (hostHeader) {
-    const hostMatch = SAFE_HOST_HEADER_RE.exec(hostHeader.trim());
+    const normalizedHost = hostHeader.trim().toLowerCase();
+    const hostMatch = SAFE_HOST_HEADER_RE.exec(normalizedHost);
     const portNum = hostMatch?.[1] ? Number(hostMatch[1]) : null;
     const validPort = portNum === null || (portNum >= 1 && portNum <= 65535);
-    if (hostMatch && validPort && !hostHeader.includes('..')) {
-      allowedOrigins.add(`https://${hostHeader.trim()}`);
-      allowedOrigins.add(`http://${hostHeader.trim()}`);
+    if (hostMatch && validPort && !normalizedHost.includes('..')) {
+      allowedOrigins.add(`https://${normalizedHost}`);
+      allowedOrigins.add(`http://${normalizedHost}`);
     }
   }
 
@@ -271,8 +272,12 @@ export function createApp() {
 
   // Malformed JSON, oversized payload & safe error handler (never leaks stack traces)
   app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
-    const typedErr = err as { status?: number; type?: string } | undefined;
-    if (typedErr?.type === 'entity.too.large' || typedErr?.status === 413) {
+    const errRecord =
+      err !== null && typeof err === 'object' ? (err as Record<string, unknown>) : null;
+    const status = typeof errRecord?.status === 'number' ? errRecord.status : undefined;
+    const type = typeof errRecord?.type === 'string' ? errRecord.type : undefined;
+
+    if (type === 'entity.too.large' || status === 413) {
       return res.status(413).json({ error: 'Request payload exceeds the 32KB limit.' });
     }
     if (err instanceof SyntaxError && 'body' in err) {

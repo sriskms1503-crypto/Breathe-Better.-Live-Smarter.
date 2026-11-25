@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Copy, Download, Shield, Users } from 'lucide-react';
 import { COMMUNITY_CHALLENGES, type CommunityChallenge } from '../data/presets.ts';
 import type { EnvironmentalSnapshot } from '../types/airwise.ts';
@@ -56,26 +56,42 @@ export function CommunityPage({
     };
   }, []);
 
-  const collectiveWeeklyKg = COMMUNITY_CHALLENGES.reduce((sum, c) => {
-    const joinedBonus = joinedChallengeIds.includes(c.id) ? 1 : 0;
-    return sum + (c.participantsCount + joinedBonus) * c.estimatedWeeklyCo2SavedKgPerHome;
-  }, 0);
-
-  const personalWeeklyKg = COMMUNITY_CHALLENGES.reduce((sum, c) => {
-    return sum + (joinedChallengeIds.includes(c.id) ? c.estimatedWeeklyCo2SavedKgPerHome : 0);
-  }, 0);
-
-  const maxWeeklyKg = COMMUNITY_CHALLENGES.reduce(
-    (sum, c) => sum + c.estimatedWeeklyCo2SavedKgPerHome,
-    0
+  const collectiveWeeklyKg = useMemo(
+    () =>
+      COMMUNITY_CHALLENGES.reduce((sum, c) => {
+        const joinedBonus = joinedChallengeIds.includes(c.id) ? 1 : 0;
+        return sum + (c.participantsCount + joinedBonus) * c.estimatedWeeklyCo2SavedKgPerHome;
+      }, 0),
+    [joinedChallengeIds]
   );
+
+  const personalWeeklyKg = useMemo(
+    () =>
+      COMMUNITY_CHALLENGES.reduce((sum, c) => {
+        return sum + (joinedChallengeIds.includes(c.id) ? c.estimatedWeeklyCo2SavedKgPerHome : 0);
+      }, 0),
+    [joinedChallengeIds]
+  );
+
+  const maxWeeklyKg = useMemo(
+    () =>
+      COMMUNITY_CHALLENGES.reduce(
+        (sum, c) => sum + c.estimatedWeeklyCo2SavedKgPerHome,
+        0
+      ),
+    []
+  );
+
   const personalProgressPct =
     maxWeeklyKg > 0 ? Math.min(100, Math.round((personalWeeklyKg / maxWeeklyKg) * 100)) : 0;
 
-  const visibleChallenges =
-    challengeFilter === 'All'
-      ? COMMUNITY_CHALLENGES
-      : COMMUNITY_CHALLENGES.filter((c) => c.category === challengeFilter);
+  const visibleChallenges = useMemo(
+    () =>
+      challengeFilter === 'All'
+        ? COMMUNITY_CHALLENGES
+        : COMMUNITY_CHALLENGES.filter((c) => c.category === challengeFilter),
+    [challengeFilter]
+  );
 
   const awarenessTemplates: Record<CardTheme, { headline: string; body: string }> = {
     smog: {

@@ -7,6 +7,9 @@ import {
   escapeXml,
   formatSafeDateTime,
   formatSafeTime,
+  parseAqiStandard,
+  parseGridRegion,
+  parseRespiratorGrade,
   slugifyCity,
 } from './format.ts';
 import { buildCsvString, sanitizeFilename } from './download.ts';
@@ -74,3 +77,18 @@ test('buildCsvString and slugifyCity format cleanly', () => {
   assert.equal(clampFiniteInt(4.6, 1, 20, 1), 5);
   assert.equal(clampFiniteInt(99, 1, 20, 1), 20);
 });
+
+test('select option parsers validate allowed values and return safe fallbacks', () => {
+  assert.equal(parseGridRegion('GLOBAL'), 'GLOBAL');
+  assert.equal(parseGridRegion('INDIA'), 'INDIA');
+  assert.equal(parseGridRegion('UNKNOWN', 'GLOBAL'), 'GLOBAL');
+
+  assert.equal(parseAqiStandard('US_EPA'), 'US_EPA');
+  assert.equal(parseAqiStandard('CPCB'), 'CPCB');
+  assert.equal(parseAqiStandard('INVALID', 'CPCB'), 'CPCB');
+
+  assert.equal(parseRespiratorGrade('surgical'), 'surgical');
+  assert.equal(parseRespiratorGrade('none'), 'none');
+  assert.equal(parseRespiratorGrade('cloth', 'n95_ffp2'), 'n95_ffp2');
+});
+

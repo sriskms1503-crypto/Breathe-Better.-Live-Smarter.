@@ -3,6 +3,7 @@ import { ArrowLeftRight, RefreshCw } from 'lucide-react';
 import { PRESET_CITIES, buildDemoFallbackSnapshot } from '../data/presets.ts';
 import type { EnvironmentalSnapshot } from '../types/airwise.ts';
 import { compareCitySnapshots, findOptimalVentilationWindow } from '../lib/exposure.ts';
+import { fetchAirQualitySnapshot } from '../lib/airQualityClient.ts';
 
 interface CityComparisonCardProps {
   primarySnapshot: EnvironmentalSnapshot;
@@ -41,28 +42,13 @@ export function CityComparisonCard({ primarySnapshot }: CityComparisonCardProps)
     async function loadBenchmark() {
       setLoading(true);
       try {
-        const params = new URLSearchParams({
-          lat: String(targetCity.latitude),
-          lon: String(targetCity.longitude),
-          name: targetCity.name,
-          region: targetCity.region,
-          country: targetCity.country,
-          countryCode: targetCity.countryCode,
-          timezone: targetCity.timezone,
-        });
-        const res = await fetch(`/api/air-quality?${params.toString()}`, {
-          signal: controller.signal,
-        });
-        if (!res.ok) throw new Error('Comparison fetch unavailable');
-        const json = (await res.json()) as { snapshot?: EnvironmentalSnapshot };
+        const snapshot = await fetchAirQualitySnapshot(
+          targetCity,
+          controller.signal,
+          'Comparison payload incomplete; showing offline reference snapshot.'
+        );
         if (!controller.signal.aborted) {
-          setSecondarySnapshot(
-            json.snapshot ??
-              buildDemoFallbackSnapshot(
-                targetCity,
-                'Comparison payload incomplete; showing offline reference snapshot.'
-              )
-          );
+          setSecondarySnapshot(snapshot);
         }
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;

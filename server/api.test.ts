@@ -247,6 +247,7 @@ test('isAllowedOrigin prevents Host-header injection and safely normalizes confi
   assert.equal(isAllowedOrigin('https://evil.example', 'evil.example\r\nX-Injected: true'), false);
   assert.equal(isAllowedOrigin('https://evil.example:99999', 'evil.example:99999'), false);
   assert.equal(isAllowedOrigin('https://ais.example.run.app', 'ais.example.run.app'), true);
+  assert.equal(isAllowedOrigin('https://ais.example.run.app', 'AIS.Example.Run.App'), true);
   assert.equal(
     isAllowedOrigin('https://app.example.com', undefined, 'https://app.example.com/some/path'),
     true

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { CalendarClock, CheckCircle2, Circle, Download, SlidersHorizontal } from 'lucide-react';
 import type { EnvironmentalSnapshot, FamilyProfile, PageId, RoutineSlot } from '../types/airwise.ts';
 import {
@@ -29,6 +29,7 @@ export function RoutinePage({
   onTogglePeriod,
   onNavigate,
 }: RoutinePageProps) {
+  const [announcement, setAnnouncement] = useState('');
   const slots = useMemo(() => buildDailyRoutine(snapshot, profile), [snapshot, profile]);
   const progressPct = Math.round((completedPeriods.length / slots.length) * 100);
 
@@ -39,10 +40,23 @@ export function RoutinePage({
       `airwise-daily-routine-${slugifyCity(snapshot.location.name)}.md`,
       'text/markdown;charset=utf-8'
     );
+    setAnnouncement(`Downloaded daily routine plan for ${snapshot.location.name} as Markdown.`);
+  }
+
+  function handleTogglePeriod(period: RoutineSlot['period'], isDone: boolean) {
+    onTogglePeriod(period);
+    setAnnouncement(
+      isDone
+        ? `${period} routine marked incomplete.`
+        : `${period} routine marked completed.`
+    );
   }
 
   return (
     <div className="space-y-6">
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {announcement}
+      </div>
       <div className="grid grid-cols-1 items-stretch gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-12">
         <div className="h-36 overflow-hidden rounded-lg border border-slate-200 bg-slate-100 sm:col-span-4 sm:h-auto">
           <SafeImage
@@ -130,7 +144,7 @@ export function RoutinePage({
                   </span>
                   <button
                     type="button"
-                    onClick={() => onTogglePeriod(slot.period)}
+                    onClick={() => handleTogglePeriod(slot.period, isDone)}
                     aria-pressed={isDone}
                     className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8] ${
                       isDone

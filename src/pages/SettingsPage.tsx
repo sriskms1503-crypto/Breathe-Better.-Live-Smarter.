@@ -3,7 +3,7 @@ import { Download, Lock, Trash2, Upload, Users } from 'lucide-react';
 import type { AlertPreferences, FamilyProfile, HouseholdGroup } from '../types/airwise.ts';
 import type { CarbonCalculatorInput } from '../lib/impact.ts';
 import { downloadTextFile } from '../lib/download.ts';
-import { clampFiniteInt } from '../lib/format.ts';
+import { clampFiniteInt, parseAqiStandard, parseGridRegion } from '../lib/format.ts';
 import { hasUnsafeObjectKeys, PersistedStateSchema } from '../lib/validation.ts';
 
 interface SettingsPageProps {
@@ -191,7 +191,7 @@ export function SettingsPage({
               onChange={(e) =>
                 onUpdateProfile({
                   ...profile,
-                  preferredStandard: e.target.value as 'CPCB' | 'US_EPA',
+                  preferredStandard: parseAqiStandard(e.target.value, profile.preferredStandard),
                 })
               }
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-[#102A43] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8]"
@@ -211,7 +211,7 @@ export function SettingsPage({
               onChange={(e) =>
                 onUpdateProfile({
                   ...profile,
-                  gridRegion: e.target.value as 'INDIA' | 'GLOBAL',
+                  gridRegion: parseGridRegion(e.target.value, profile.gridRegion),
                 })
               }
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-[#102A43] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38BDF8]"

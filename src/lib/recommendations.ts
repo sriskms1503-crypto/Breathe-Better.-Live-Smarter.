@@ -1,4 +1,5 @@
 import type {
+  AlertPreferences,
   AqiCategory,
   EnvironmentalSnapshot,
   FamilyProfile,
@@ -675,4 +676,22 @@ export function formatDailyRoutineMarkdown(
   }
 
   return lines.join('\n');
+}
+
+/**
+ * Filters generated smart alerts according to the user's configured alert preferences.
+ */
+export function filterAlertsByPreferences(
+  alerts: ReadonlyArray<SmartAlert>,
+  preferences: AlertPreferences
+): SmartAlert[] {
+  const prefMap: Record<SmartAlert['type'], boolean> = {
+    severe_aqi: preferences.severeAqi,
+    rising_pm25: preferences.risingPm25,
+    forecast_alert: preferences.forecastAlerts,
+    ventilation_window: preferences.ventilationWindows,
+    filter_maintenance: preferences.filterMaintenance,
+    sustainability_goal: preferences.sustainabilityGoals,
+  };
+  return alerts.filter((alert) => prefMap[alert.type]);
 }

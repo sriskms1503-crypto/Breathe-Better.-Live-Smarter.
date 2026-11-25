@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Globe2 } from 'lucide-react';
 import type { CityLocation } from '../types/airwise.ts';
 import { PRESET_CITIES } from '../data/presets.ts';
@@ -35,11 +35,14 @@ export function AirQualityMap({
     setRegionMode
   );
 
-  const projectedPins = getMapStationsForMode(PRESET_CITIES, currentLocation, regionMode);
-  const quickStations =
-    regionMode === 'INDIA'
-      ? PRESET_CITIES.filter((c) => c.isIndia)
-      : PRESET_CITIES;
+  const projectedPins = useMemo(
+    () => getMapStationsForMode(PRESET_CITIES, currentLocation, regionMode),
+    [currentLocation, regionMode]
+  );
+  const quickStations = useMemo(
+    () => (regionMode === 'INDIA' ? PRESET_CITIES.filter((c) => c.isIndia) : PRESET_CITIES),
+    [regionMode]
+  );
 
   return (
     <section

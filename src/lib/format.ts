@@ -76,3 +76,20 @@ export function clampFiniteInt(
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
+export function parseGridRegion(value: string, fallback: 'INDIA' | 'GLOBAL' = 'INDIA'): 'INDIA' | 'GLOBAL' {
+  if (value === 'INDIA' || value === 'GLOBAL') return value;
+  return fallback;
+}
+
+export function parseAqiStandard(value: string, fallback: 'CPCB' | 'US_EPA' = 'CPCB'): 'CPCB' | 'US_EPA' {
+  if (value === 'CPCB' || value === 'US_EPA') return value;
+  return fallback;
+}
+
+export function parseRespiratorGrade(
+  value: string,
+  fallback: 'none' | 'surgical' | 'n95_ffp2' = 'n95_ffp2'
+): 'none' | 'surgical' | 'n95_ffp2' {
+  if (value === 'none' || value === 'surgical' || value === 'n95_ffp2') return value;
+  return fallback;
+}

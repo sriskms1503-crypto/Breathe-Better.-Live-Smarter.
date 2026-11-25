@@ -9,6 +9,8 @@ import {
   analyzePollutionInsights,
   buildDailyRoutine,
   buildSmartAlerts,
+  filterAlertsByPreferences,
+  formatDailyRoutineMarkdown,
   formatHouseholdGroups,
   getInitialIndoorChecklist,
   getInitialLifestyleAlternatives,
@@ -281,3 +283,33 @@ test('all preset cities produce valid demo snapshots and community challenges ha
     assert.ok(chal.actionChecklist.length >= 2);
   }
 });
+
+test('filterAlertsByPreferences respects per-type toggles and formatDailyRoutineMarkdown summarizes plan', () => {
+  const delhi = PRESET_CITIES.find((c) => c.id === 'delhi-in')!;
+  const snap = buildDemoFallbackSnapshot(delhi);
+  const allAlerts = buildSmartAlerts(snap);
+
+  const onlyMaint = filterAlertsByPreferences(allAlerts, {
+    severeAqi: false,
+    risingPm25: false,
+    forecastAlerts: false,
+    ventilationWindows: false,
+    filterMaintenance: true,
+    sustainabilityGoals: false,
+  });
+  assert.ok(onlyMaint.every((a) => a.type === 'filter_maintenance'));
+
+  const profile = {
+    householdSize: 3,
+    groups: ['children' as const],
+    preferredStandard: 'CPCB' as const,
+    hasPurifier: true,
+    gridRegion: 'INDIA' as const,
+  };
+  const slots = buildDailyRoutine(snap, profile);
+  const md = formatDailyRoutineMarkdown(snap, profile, slots);
+  assert.ok(md.includes('New Delhi'));
+  assert.ok(md.includes('## Morning'));
+  assert.ok(md.includes('**Why:**'));
+});
+

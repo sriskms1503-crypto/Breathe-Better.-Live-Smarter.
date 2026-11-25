@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { CheckCircle2, Circle, Info, Leaf } from 'lucide-react';
 import type { EnvironmentalSnapshot, LifestyleAlternative } from '../types/airwise.ts';
 import { SafeImage } from '../components/SafeImage.tsx';
@@ -27,15 +27,21 @@ export function SustainabilityPage({
     setCategoryFilter
   );
 
-  const adopted = alternatives.filter((a) => a.adopted);
-  const totalWeeklyKg = adopted.reduce((s, a) => s + a.estimatedReductionKgPerWeek, 0);
+  const adopted = useMemo(() => alternatives.filter((a) => a.adopted), [alternatives]);
+  const totalWeeklyKg = useMemo(
+    () => adopted.reduce((s, a) => s + a.estimatedReductionKgPerWeek, 0),
+    [adopted]
+  );
   const sustainabilityScore =
     alternatives.length > 0 ? Math.min(100, Math.round((adopted.length / alternatives.length) * 100)) : 0;
 
-  const visible =
-    categoryFilter === 'All'
-      ? alternatives
-      : alternatives.filter((a) => a.category === categoryFilter);
+  const visible = useMemo(
+    () =>
+      categoryFilter === 'All'
+        ? alternatives
+        : alternatives.filter((a) => a.category === categoryFilter),
+    [alternatives, categoryFilter]
+  );
 
   const outdoorHigh = (snapshot.cpcbAqi ?? 120) > 150;
 
